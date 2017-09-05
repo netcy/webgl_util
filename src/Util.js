@@ -1,6 +1,13 @@
 var wg = root.wg = {};
 var Util = wg.Util = {};
 
+var getClientPoint = Util.getClientPoint = function (e) {
+  return {
+    x: (e.touches ? e.touches[0] : e).clientX,
+    y: (e.touches ? e.touches[0] : e).clientY
+  };
+}
+
 function nextPowerOfTwo(x) {
   --x;
   for (var i = 1; i < 32; i <<= 1) {
@@ -40,8 +47,12 @@ var setCanvasSize = Util.setCanvasSize = function (canvas, width, height) {
 };
 
 function addVertexArrayObjectSupport (gl) {
+  // https://github.com/greggman/oes-vertex-array-object-polyfill
   if (!gl.createVertexArray) {
     var ext = gl.getExtension("OES_vertex_array_object");
+    if (!ext) {
+      ext = new OESVertexArrayObject(gl);
+    }
     if (ext) {
       gl.createVertexArray = function () {
         return ext.createVertexArrayOES();
@@ -60,7 +71,7 @@ function addVertexArrayObjectSupport (gl) {
   }
 }
 
-Util.initWebGL = function (canvas, options, initWebglFunc) {
+var initWebGL = Util.initWebGL = function (canvas, options, initWebglFunc) {
   if (typeof canvas === 'string') {
     canvas = document.getElementById(canvas);
   }
@@ -71,25 +82,6 @@ Util.initWebGL = function (canvas, options, initWebglFunc) {
   });
   addVertexArrayObjectSupport(gl);
   gl.cache = {};
-  gl.cache.quadVao = new VertexArrayObject(gl, {
-    buffers: {
-      position: {
-        array: [
-          // First triangle
-           1.0,  1.0,
-          -1.0,  1.0,
-          -1.0, -1.0,
-          // Second triangle
-          -1.0, -1.0,
-           1.0, -1.0,
-           1.0,  1.0
-        ],
-        type: 'FLOAT',
-        index: 0,
-        size: 2
-      }
-    }
-  });
 
   gl.initingTextures = {};
   // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
@@ -107,8 +99,32 @@ Util.initWebGL = function (canvas, options, initWebglFunc) {
   });
   canvas.addEventListener('webglcontextrestored', function (e) {
     console.log(e);
-    initWebglFunc(gl);
+    init();
   });
-  initWebglFunc(gl);
+
+  function init () {
+    gl.cache.quadVao = new VertexArrayObject(gl, {
+      buffers: {
+        position: {
+          array: [
+            // First triangle
+             1.0,  1.0,
+            -1.0,  1.0,
+            -1.0, -1.0,
+            // Second triangle
+            -1.0, -1.0,
+             1.0, -1.0,
+             1.0,  1.0
+          ],
+          type: 'FLOAT',
+          index: 0,
+          size: 2
+        }
+      }
+    });
+    initWebglFunc(gl);
+  }
+
+  init();
   return gl;
 };

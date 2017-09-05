@@ -2,6 +2,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Test WebGL</title>
+  <script src="./libs/OESVertexArrayObject-polyfill.js"></script>
   <script src="../dist/wg.js"></script>
   <script src="./tilt-shift.js"></script>
 </head>
@@ -23,7 +24,7 @@
     <label>Center Y<input id="txtCenterY" type="range" value="240" min="1" max="512" step="1" onchange="refresh()"></input></label>
     <br>
     <button onclick="showZoomBlur();">Zoom Blur</button>
-    <label>Strength<input id="txtStrength" type="range" value="0.01" min="0" max="1" step="0.01" onchange="refresh()"></input></label>
+    <label>Strength<input id="txtStrength" type="range" value="0.12" min="0" max="1" step="0.01" onchange="refresh()"></input></label>
     <label>Center X<input id="txtZoomBlurCenterX" type="range" value="320" min="1" max="640" step="1" onchange="refresh()"></input></label>
     <label>Center Y<input id="txtZoomBlurCenterY" type="range" value="240" min="1" max="480" step="1" onchange="refresh()"></input></label>
   </div>

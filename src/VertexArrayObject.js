@@ -3,7 +3,7 @@
  * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
- *     buffers: { array: [], index: 0, size: 3, type: 'FLOAT' }
+ *     buffers: { position: {array: [], index: 0, size: 3, type: 'FLOAT' } }
  *     offset: default 0
  *     mode: default 'TRIANGLES'
  */
@@ -53,7 +53,7 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(buffer.array), gl.STATIC_DRAW);
       gl.enableVertexAttribArray(buffer.index);
       // index, size, type, normalized, stride, offset
-      gl.vertexAttribPointer(buffer.index, buffer.size, gl[buffer.type], false, 0, 0);
+      gl.vertexAttribPointer(buffer.index, buffer.size, gl[buffer.type || 'FLOAT'], false, 0, 0);
     }
   });
   gl.bindVertexArray(null);

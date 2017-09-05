@@ -28,7 +28,10 @@ var Program = wg.Program = function (gl, options) {
     gl.attachShader(program, fragmentShader);
 
     // http://stackoverflow.com/questions/20305231/webgl-warning-attribute-0-is-disabled-this-has-significant-performance-penalt
-    // gl.bindAttribLocation(program, 0, 'aPosition');
+    // TODO
+    gl.bindAttribLocation(program, 0, 'a_position');
+    gl.bindAttribLocation(program, 1, 'a_normal');
+    gl.bindAttribLocation(program, 2, 'a_uv');
     gl.linkProgram(program);
 
     // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Shaders_and_Programs
@@ -141,13 +144,13 @@ Program.prototype.setUniform = function (name, value) {
       gl.uniform4fv(location, value);
       break;
     case gl.FLOAT_MAT2:
-      gl.uniformMatrix2fv(location, value);
+      gl.uniformMatrix2fv(location, false, value);
       break;
     case gl.FLOAT_MAT3:
-      gl.uniformMatrix3fv(location, value);
+      gl.uniformMatrix3fv(location, false, value);
       break;
     case gl.FLOAT_MAT4:
-      gl.uniformMatrix4fv(location, value);
+      gl.uniformMatrix4fv(location, false, value);
       break;
   }
 };

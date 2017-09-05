@@ -4,6 +4,13 @@
 var wg = root.wg = {};
 var Util = wg.Util = {};
 
+var getClientPoint = Util.getClientPoint = function (e) {
+  return {
+    x: (e.touches ? e.touches[0] : e).clientX,
+    y: (e.touches ? e.touches[0] : e).clientY
+  };
+}
+
 function nextPowerOfTwo(x) {
   --x;
   for (var i = 1; i < 32; i <<= 1) {
@@ -43,8 +50,12 @@ var setCanvasSize = Util.setCanvasSize = function (canvas, width, height) {
 };
 
 function addVertexArrayObjectSupport (gl) {
+  // https://github.com/greggman/oes-vertex-array-object-polyfill
   if (!gl.createVertexArray) {
     var ext = gl.getExtension("OES_vertex_array_object");
+    if (!ext) {
+      ext = new OESVertexArrayObject(gl);
+    }
     if (ext) {
       gl.createVertexArray = function () {
         return ext.createVertexArrayOES();
@@ -63,7 +74,7 @@ function addVertexArrayObjectSupport (gl) {
   }
 }
 
-Util.initWebGL = function (canvas, options, initWebglFunc) {
+var initWebGL = Util.initWebGL = function (canvas, options, initWebglFunc) {
   if (typeof canvas === 'string') {
     canvas = document.getElementById(canvas);
   }
@@ -74,25 +85,6 @@ Util.initWebGL = function (canvas, options, initWebglFunc) {
   });
   addVertexArrayObjectSupport(gl);
   gl.cache = {};
-  gl.cache.quadVao = new VertexArrayObject(gl, {
-    buffers: {
-      position: {
-        array: [
-          // First triangle
-           1.0,  1.0,
-          -1.0,  1.0,
-          -1.0, -1.0,
-          // Second triangle
-          -1.0, -1.0,
-           1.0, -1.0,
-           1.0,  1.0
-        ],
-        type: 'FLOAT',
-        index: 0,
-        size: 2
-      }
-    }
-  });
 
   gl.initingTextures = {};
   // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
@@ -110,9 +102,33 @@ Util.initWebGL = function (canvas, options, initWebglFunc) {
   });
   canvas.addEventListener('webglcontextrestored', function (e) {
     console.log(e);
-    initWebglFunc(gl);
+    init();
   });
-  initWebglFunc(gl);
+
+  function init () {
+    gl.cache.quadVao = new VertexArrayObject(gl, {
+      buffers: {
+        position: {
+          array: [
+            // First triangle
+             1.0,  1.0,
+            -1.0,  1.0,
+            -1.0, -1.0,
+            // Second triangle
+            -1.0, -1.0,
+             1.0, -1.0,
+             1.0,  1.0
+          ],
+          type: 'FLOAT',
+          index: 0,
+          size: 2
+        }
+      }
+    });
+    initWebglFunc(gl);
+  }
+
+  init();
   return gl;
 };
 
@@ -147,7 +163,10 @@ var Program = wg.Program = function (gl, options) {
     gl.attachShader(program, fragmentShader);
 
     // http://stackoverflow.com/questions/20305231/webgl-warning-attribute-0-is-disabled-this-has-significant-performance-penalt
-    // gl.bindAttribLocation(program, 0, 'aPosition');
+    // TODO
+    gl.bindAttribLocation(program, 0, 'a_position');
+    gl.bindAttribLocation(program, 1, 'a_normal');
+    gl.bindAttribLocation(program, 2, 'a_uv');
     gl.linkProgram(program);
 
     // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Shaders_and_Programs
@@ -260,13 +279,13 @@ Program.prototype.setUniform = function (name, value) {
       gl.uniform4fv(location, value);
       break;
     case gl.FLOAT_MAT2:
-      gl.uniformMatrix2fv(location, value);
+      gl.uniformMatrix2fv(location, false, value);
       break;
     case gl.FLOAT_MAT3:
-      gl.uniformMatrix3fv(location, value);
+      gl.uniformMatrix3fv(location, false, value);
       break;
     case gl.FLOAT_MAT4:
-      gl.uniformMatrix4fv(location, value);
+      gl.uniformMatrix4fv(location, false, value);
       break;
   }
 };
@@ -511,7 +530,7 @@ Texture.prototype.dispose = function () {
  * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
- *     buffers: { array: [], index: 0, size: 3, type: 'FLOAT' }
+ *     buffers: { position: {array: [], index: 0, size: 3, type: 'FLOAT' } }
  *     offset: default 0
  *     mode: default 'TRIANGLES'
  */
@@ -561,7 +580,7 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(buffer.array), gl.STATIC_DRAW);
       gl.enableVertexAttribArray(buffer.index);
       // index, size, type, normalized, stride, offset
-      gl.vertexAttribPointer(buffer.index, buffer.size, gl[buffer.type], false, 0, 0);
+      gl.vertexAttribPointer(buffer.index, buffer.size, gl[buffer.type || 'FLOAT'], false, 0, 0);
     }
   });
   gl.bindVertexArray(null);
@@ -943,7 +962,7 @@ TiltShiftEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) 
   tiltShiftProgram.setUniforms({
     'u_windowSize': [gl.canvas.width, gl.canvas.height],
     'u_pixelRatio': window.devicePixelRatio,
-    'u_tiltShiftType': tiltShiftType,
+    'u_tiltShiftType': self._tiltShiftType,
     'u_sampler0': 0,
     'u_sampler1': 1,
     'u_fromPoint': self._fromPoint,
@@ -1129,4 +1148,440 @@ ZoomBlurEffect.prototype.setStrength = function (strength) {
 ZoomBlurEffect.prototype.getStrength = function () {
   return this._strength;
 };
+
+// Source: src/Camera.js
+var Camera = wg.Camera = function (canvas, callback) {
+  var self = this;
+  self._callback = callback;
+  self._viewMatrix = mat4.create();
+  self._projectMatix = mat4.create();
+  self._rotateMatrix = mat4.create();
+  self._viewDirty = true;
+  self._projectDirty = true;
+
+  self._position = vec3.create();
+  self._distance = 10;
+  self._target = vec3.create();
+  self._up = vec3.fromValues(0, 1, 0);
+
+  self._fovy = 45 / 180 * Math.PI;
+  self._aspect = canvas.width / canvas.height;
+  self._near = 1;
+  self._far = 1000;
+
+  self._rotateX = 0;
+  self._rotateY = 0;
+
+  canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('wheel', handleWheel);
+  canvas.addEventListener('blur', clean);
+
+  var rotateSpeedY = 360 / canvas.width * window.devicePixelRatio / 180 * Math.PI,
+    rotateSpeedX = 180 / canvas.height * window.devicePixelRatio / 180 * Math.PI,
+    maxRotateX = Math.PI / 2 * 0.95,
+    lastPoint;
+
+  function handleMouseDown(e) {
+    lastPoint = getClientPoint(e);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', clean);
+  }
+
+  function handleMouseMove(e) {
+    var point = getClientPoint(e),
+      offsetX = point.x - lastPoint.x,
+      offsetY = point.y - lastPoint.y;
+    self._rotateX += -offsetY * rotateSpeedX;
+    self._rotateY += -offsetX * rotateSpeedY;
+    self._rotateY = self._rotateY % (Math.PI * 2);
+    lastPoint = point;
+    if (self._rotateX > maxRotateX) {
+      self._rotateX = maxRotateX;
+    }
+    if (self._rotateX < -maxRotateX) {
+      self._rotateX = -maxRotateX;
+    }
+    self._viewDirty = true;
+    callback();
+  }
+
+  function handleWheel(e) {
+    // TODO chrome bug
+    e.preventDefault();
+    var scale = 0;
+    if (e.deltaY > 0) {
+      self._distance *= 1.1;
+    } else if (e.deltaY < 0) {
+      self._distance /= 1.1;
+    }
+    self._viewDirty = true;
+    callback();
+  }
+
+  function clean() {
+    lastPoint = null;
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', clean);
+  }
+};
+
+Camera.prototype.getPosition = function () {
+  return this._position;
+};
+
+Camera.prototype.setPosition = function (x, y, z) {
+  var self = this,
+    newPosition = vec3.create(),
+    xz;
+  vec3.set(self._position, x, y, z);
+  vec3.subtract(newPosition, self._position, self._target);
+  xz = Math.sqrt(newPosition[0]*newPosition[0] + newPosition[2] * newPosition[2]);
+  self._rotateY = Math.atan2(newPosition[0], newPosition[2]);
+  self._rotateX = -Math.atan2(newPosition[1], xz);
+  self._distance = vec3.length(newPosition);
+  self._viewDirty = true;
+  self._callback();
+};
+
+Camera.prototype.getTarget = function () {
+  return this._target;
+};
+
+Camera.prototype.setTarget = function (x, y, z) {
+  var self = this;
+  vec3.set(self._target, x, y, z);
+  self._viewDirty = true;
+  self._callback();
+};
+
+Camera.prototype.getViewMatrix = function () {
+  var self = this,
+    viewMatrix = self._viewMatrix,
+    rotateMatrix = self._rotateMatrix,
+    position = self._position;
+  if (self._viewDirty) {
+    mat4.identity(rotateMatrix);
+    mat4.translate(rotateMatrix, rotateMatrix, self._target);
+    mat4.rotateY(rotateMatrix, rotateMatrix, self._rotateY);
+    mat4.rotateX(rotateMatrix, rotateMatrix, self._rotateX);
+    vec3.transformMat4(position, vec3.fromValues(0, 0, self._distance), rotateMatrix);
+    mat4.lookAt(viewMatrix, position, self._target, self._up);
+    self._viewDirty = false;
+  }
+  return viewMatrix;
+};
+
+Camera.prototype.getProjectMatrix = function () {
+  var self = this,
+    projectMatix = self._projectMatix;
+  if (self._projectDirty) {
+    mat4.perspective(projectMatix, self._fovy, self._aspect, self._near, self._far);
+    self._projectDirty = false;
+  }
+  return projectMatix;
+};
+
+// Source: src/Scene.js
+var VERTEX_SHADER_SOURCE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+attribute vec4 a_position;
+attribute vec3 a_normal;
+attribute vec2 a_uv;
+
+uniform mat4 u_projectMatrix;
+uniform mat4 u_viewMatrix;
+uniform mat4 u_modelMatrix;
+uniform mat3 u_normalMatrix;
+
+varying vec3 v_normal;
+varying vec3 v_position;
+varying vec2 v_uv;
+
+void main () {
+  gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
+  v_position = (u_modelMatrix * a_position).xyz;
+  v_normal = normalize(u_normalMatrix * a_normal);
+  v_uv = a_uv;
+}`;
+
+var FRAGMENT_SHADER_SOURCE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+uniform vec3 u_lightColor;
+uniform vec3 u_lightPosition;
+uniform vec3 u_ambientColor;
+uniform sampler2D u_sampler;
+
+varying vec3 v_normal;
+varying vec3 v_position;
+varying vec2 v_uv;
+
+void main () {
+  vec3 normal = normalize(v_normal);
+  vec3 lightDirection = normalize(u_lightPosition - v_position);
+  float nDotL = max(dot(lightDirection, normal), 0.0);
+  vec4 color = texture2D(u_sampler, v_uv);
+  vec3 diffuse = u_lightColor * color.rgb * nDotL;
+  vec3 ambient = u_ambientColor * color.rgb;
+  gl_FragColor = vec4(diffuse + ambient, color.a);
+  // gl_FragColor = vec4(1, 0, 0, 1);
+}`;
+
+var Scene = wg.Scene = function (canvas, options) {
+  var self = this;
+
+  if (typeof canvas === 'string') {
+    canvas = document.getElementById(canvas);
+  }
+
+  setCanvasSize(canvas);
+  self._canvas = canvas;
+  self._dirty = true;
+  self._objects = [];
+  self._camera = new Camera(canvas, function () {
+    self.redraw();
+  });
+  self._lightColor = [1, 1, 1];
+  self._lightPosition = [10, 10, 10];
+  self._ambientColor = [.3, .3, .3];
+  self._clearColor = [0, 0, 0, 0];
+
+  var gl = self._gl = canvas.getContext('webgl', options || {
+    antialias: true
+  });
+  addVertexArrayObjectSupport(gl);
+  gl.cache = {};
+  self._program = new Program(gl, {
+    vertex: VERTEX_SHADER_SOURCE,
+    fragment: FRAGMENT_SHADER_SOURCE
+  });
+
+  gl.initingTextures = {};
+  // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
+  canvas.addEventListener('webglcontextlost', function (e) {
+    console.log(e);
+    e.preventDefault();
+    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Deal_with_outstanding_asynchronous_requests
+    var imageUrls = Object.keys(gl.initingTextures);
+    imageUrls.forEach(function (imageUrl) {
+      gl.initingTextures[imageUrl].onload = null;
+    });
+    gl.initingTextures = {};
+    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Turn_off_your_rendering_loop_on_lost_context
+    gl.aniamtionId && cancelAnimationFrame(gl.aniamtionId);
+  });
+  canvas.addEventListener('webglcontextrestored', function (e) {
+    console.log(e);
+    init();
+  });
+
+  function init () {
+    gl.cache.quadVao = new VertexArrayObject(gl, {
+      buffers: {
+        position: {
+          array: [
+            // First triangle
+             1.0,  1.0,
+            -1.0,  1.0,
+            -1.0, -1.0,
+            // Second triangle
+            -1.0, -1.0,
+             1.0, -1.0,
+             1.0,  1.0
+          ],
+          index: 0,
+          size: 2
+        }
+      }
+    });
+    gl.cache.vaos = {};
+    gl.cache.vaos['cube'] = new VertexArrayObject(gl, {
+      buffers: {
+        position: {
+          array: [
+            -0.5, 0.5,-0.5,  -0.5, 0.5, 0.5,   0.5, 0.5, 0.5,   0.5, 0.5,-0.5,  // v6-v1-v0-v5 up
+            -0.5, 0.5, 0.5,  -0.5,-0.5, 0.5,   0.5,-0.5, 0.5,   0.5, 0.5, 0.5,  // v1-v2-v3-v0 front
+             0.5, 0.5, 0.5,   0.5,-0.5, 0.5,   0.5,-0.5,-0.5,   0.5, 0.5,-0.5,  // v0-v3-v4-v5 right
+             0.5, 0.5,-0.5,   0.5,-0.5,-0.5,  -0.5,-0.5,-0.5,  -0.5, 0.5,-0.5,  // v5-v4-v7-v6 back
+            -0.5, 0.5,-0.5,  -0.5,-0.5,-0.5,  -0.5,-0.5, 0.5,  -0.5, 0.5, 0.5,  // v6-v7-v2-v1 left
+            -0.5,-0.5, 0.5,  -0.5,-0.5,-0.5,   0.5,-0.5,-0.5,   0.5,-0.5, 0.5   // v2-v7-v4-v3 down
+          ],
+          index: 0,
+          size: 3
+        },
+        normal: {
+          array: [
+             0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,  // v1-v0-v5-v6 up
+             0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,  // v2-v3－v0-v1 front
+             1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,  // v3-v4-v5-v0 right
+             0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0,  // v4-v7-v6-v5 back
+            -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  // v7-v2-v1-v6 left
+             0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0   // v7-v4-v3-v2 down
+          ],
+          index: 1,
+          size: 3
+        },
+        uv: {
+          array: [
+            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v6-v1-v0-v5 up
+            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v1-v2-v3-v0 front
+            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v0-v3-v4-v5 right
+            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v5-v4-v7-v6 back
+            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v6-v7-v2-v1 left
+            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0     // v2-v7-v4-v3 down
+          ],
+          index: 2,
+          size: 2
+        },
+        index: {
+          array: [
+             0, 1, 2,   2, 3, 0,    // up
+             4, 5, 6,   6, 7, 4,    // front
+             8, 9,10,  10,11, 8,    // right
+            12,13,14,  14,15,12,    // back
+            16,17,18,  18,19,16,    // left
+            20,21,22,  22,23,20     // down
+          ]
+        }
+      },
+    });
+    gl.enable(gl.CULL_FACE);
+    // gl.frontFace(gl.CCW);
+    gl.enable(gl.DEPTH_TEST);
+    // gl.depthFunc(gl.LEQUAL);
+    self._imageTexture = new wg.Texture(gl, {
+      url: 'images/crate.gif',
+      callback: function () {
+        self.redraw();
+      }
+    });
+
+    (function render() {
+      gl.aniamtionId = requestAnimationFrame(render);
+      if (self._dirty) {
+        self.draw(gl);
+      }
+    })();
+  }
+
+  init();
+};
+
+Scene.prototype.redraw = function () {
+  this._dirty = true;
+};
+
+Scene.prototype.draw = function () {
+  var self = this,
+    program = self._program,
+    camera = self._camera,
+    gl = self._gl,
+    clearColor = self._clearColor;
+  self._dirty = false;
+  gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  program.use();
+  program.setUniforms({
+    u_projectMatrix: camera.getProjectMatrix(),
+    u_viewMatrix: camera.getViewMatrix(),
+    u_lightColor: self._lightColor,
+    u_lightPosition: self._lightPosition,
+    u_ambientColor: self._ambientColor
+  });
+  self._objects.forEach(function (object) {
+    var vao = self._gl.cache.vaos[object.type];
+    if (vao) {
+      program.setUniforms({
+        u_modelMatrix: object.modelMatrix,
+        u_normalMatrix: object.normalMatrix,
+        u_sampler: 0
+      });
+      self._imageTexture.bind(0);
+      vao.draw();
+    }
+  });
+};
+
+Scene.prototype.add = function (object) {
+  var self = this;
+  self._objects.push(object);
+  self._dirty = true;
+};
+
+Scene.prototype.getCamera = function () {
+  return this._camera;
+};
+
+Scene.prototype.getLightColor = function () {
+  return this._lightColor;
+};
+
+Scene.prototype.setLightColor = function (lightColor) {
+  this._lightColor = lightColor;
+  this.redraw();
+};
+
+Scene.prototype.getLightPosition = function () {
+  return this._lightPosition;
+};
+
+Scene.prototype.setLightPosition = function (lightPosition) {
+  this._lightPosition = lightPosition;
+  this.redraw();
+};
+
+Scene.prototype.getAmbientColor = function () {
+  return this._ambientColor;
+};
+
+Scene.prototype.setAmbientColor = function (ambientColor) {
+  this._ambientColor = ambientColor;
+  this.redraw();
+};
+
+Scene.prototype.getClearColor = function () {
+  return this._clearColor;
+};
+
+Scene.prototype.setClearColor = function (clearColor) {
+  this._clearColor = clearColor;
+  this.redraw();
+};
+
+// Source: src/Object.js
+var objectId = 1;
+wg.Object = function () {
+  var self = this;
+  self.id = objectId++;
+  self.modelMatrix = mat4.create();
+  self.normalMatrix = mat3.create();
+  self.type = null;
+  self._position = vec3.create();
+};
+
+wg.Object.prototype.setPosition = function (x, y, z) {
+  var self = this;
+  vec3.set(self._position, x, y, z);
+  self._calculateMatrix();
+  return self;
+};
+
+wg.Object.prototype._calculateMatrix = function () {
+  var self = this;
+  mat4.fromTranslation(self.modelMatrix, self._position);
+  mat3.normalFromMat4(self.normalMatrix, self.modelMatrix);
+};
+
+// Source: src/Cube.js
+var Cube = wg.Cube = function () {
+  wg.Object.call(this);
+  this.type = 'cube';
+};
+
+Cube.prototype.__proto__ = wg.Object.prototype;
 }(this);

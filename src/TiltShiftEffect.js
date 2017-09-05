@@ -181,7 +181,7 @@ TiltShiftEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) 
   tiltShiftProgram.setUniforms({
     'u_windowSize': [gl.canvas.width, gl.canvas.height],
     'u_pixelRatio': window.devicePixelRatio,
-    'u_tiltShiftType': tiltShiftType,
+    'u_tiltShiftType': self._tiltShiftType,
     'u_sampler0': 0,
     'u_sampler1': 1,
     'u_fromPoint': self._fromPoint,
