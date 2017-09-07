@@ -3,9 +3,9 @@
  * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
- *     buffers: { position: {array: [], index: 0, size: 3, type: 'FLOAT' } }
- *     offset: default 0
- *     mode: default 'TRIANGLES'
+ *     buffers: { position: [], normal: [], uv: [], color: [], index: [] },
+ *     offset: 0,
+ *     mode: 'TRIANGLES'
  */
 var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
   var self = this,
@@ -16,13 +16,14 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
+    var attribute = attributesMap[attrName];
     var buffer = buffers[attrName];
     var bufferObject = gl.createBuffer();
     var element_type, element_size, array;
 
     if (attrName === 'position') {
       if (!self._index) {
-        self._count = buffer.array.length / buffer.size;
+        self._count = buffer.length / attribute.size;
       }
     }
 
@@ -30,30 +31,30 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
       self._index = true;
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufferObject);
 
-      if (buffer.array.length <= 256) {
+      if (buffer.length <= 256) {
         element_type = 5121; // WebGLRenderingContext.UNSIGNED_BYTE
         element_size = 1;
-        array = new Uint8Array(buffer.array);
-      } else if (buffer.array.length <= 65536) {
+        array = new Uint8Array(buffer);
+      } else if (buffer.length <= 65536) {
         element_type = 5123; // WebGLRenderingContext.UNSIGNED_SHORT
         element_size = 2;
-        array = new Uint16Array(buffer.array);
+        array = new Uint16Array(buffer);
       } else {
         // TODO check gl.getExtension('OES_element_index_uint');
         element_type = 5125; // WebGLRenderingContext.UNSIGNED_INT
         element_size = 4;
-        array = new Uint32Array(buffer.array);
+        array = new Uint32Array(buffer);
       }
       self._element_type = element_type;
       self._element_size = element_size;
-      self._count = buffer.array.length;
+      self._count = buffer.length;
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
     } else {
       gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(buffer.array), gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(buffer.index);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(buffer), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(attribute.index);
       // index, size, type, normalized, stride, offset
-      gl.vertexAttribPointer(buffer.index, buffer.size, gl[buffer.type || 'FLOAT'], false, 0, 0);
+      gl.vertexAttribPointer(attribute.index, attribute.size, gl.FLOAT, false, 0, 0);
     }
   });
   gl.bindVertexArray(null);

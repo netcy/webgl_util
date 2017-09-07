@@ -14,9 +14,10 @@ var Camera = wg.Camera = function (canvas, callback) {
 
   self._fovy = 45 / 180 * Math.PI;
   self._aspect = canvas.width / canvas.height;
-  self._near = 1;
+  self._near = 0.1;
   self._far = 1000;
 
+  self._maxRotateX = Math.PI / 2 * 0.95;
   self._rotateX = 0;
   self._rotateY = 0;
 
@@ -26,7 +27,6 @@ var Camera = wg.Camera = function (canvas, callback) {
 
   var rotateSpeedY = 360 / canvas.width * window.devicePixelRatio / 180 * Math.PI,
     rotateSpeedX = 180 / canvas.height * window.devicePixelRatio / 180 * Math.PI,
-    maxRotateX = Math.PI / 2 * 0.95,
     lastPoint;
 
   function handleMouseDown(e) {
@@ -38,32 +38,26 @@ var Camera = wg.Camera = function (canvas, callback) {
   function handleMouseMove(e) {
     var point = getClientPoint(e),
       offsetX = point.x - lastPoint.x,
-      offsetY = point.y - lastPoint.y;
-    self._rotateX += -offsetY * rotateSpeedX;
-    self._rotateY += -offsetX * rotateSpeedY;
-    self._rotateY = self._rotateY % (Math.PI * 2);
+      offsetY = point.y - lastPoint.y,
+      rotateX = self._rotateX,
+      rotateY = self._rotateY;
+    rotateX += -offsetY * rotateSpeedX;
+    rotateY += -offsetX * rotateSpeedY;
+    self.setRotateX(rotateX);
+    self.setRotateY(rotateY);
     lastPoint = point;
-    if (self._rotateX > maxRotateX) {
-      self._rotateX = maxRotateX;
-    }
-    if (self._rotateX < -maxRotateX) {
-      self._rotateX = -maxRotateX;
-    }
-    self._viewDirty = true;
-    callback();
   }
 
   function handleWheel(e) {
     // TODO chrome bug
     e.preventDefault();
-    var scale = 0;
+    var newDistance = self._distance;
     if (e.deltaY > 0) {
-      self._distance *= 1.1;
+      newDistance *= 1.1;
     } else if (e.deltaY < 0) {
-      self._distance /= 1.1;
+      newDistance /= 1.1;
     }
-    self._viewDirty = true;
-    callback();
+    self.setDistance(newDistance);
   }
 
   function clean() {
@@ -71,6 +65,22 @@ var Camera = wg.Camera = function (canvas, callback) {
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', clean);
   }
+};
+
+Camera.prototype.getDistance = function () {
+  return this._distance;
+};
+
+Camera.prototype.setDistance = function (distance) {
+  var self = this;
+  if (distance < self._near) {
+    distance = self._near;
+  }
+  if (distance > self._far) {
+    distance = self._far;
+  }
+  self._distance = distance;
+  self.invalidateViewMatrix();
 };
 
 Camera.prototype.getPosition = function () {
@@ -87,8 +97,7 @@ Camera.prototype.setPosition = function (x, y, z) {
   self._rotateY = Math.atan2(newPosition[0], newPosition[2]);
   self._rotateX = -Math.atan2(newPosition[1], xz);
   self._distance = vec3.length(newPosition);
-  self._viewDirty = true;
-  self._callback();
+  self.invalidateViewMatrix();
 };
 
 Camera.prototype.getTarget = function () {
@@ -98,8 +107,35 @@ Camera.prototype.getTarget = function () {
 Camera.prototype.setTarget = function (x, y, z) {
   var self = this;
   vec3.set(self._target, x, y, z);
-  self._viewDirty = true;
-  self._callback();
+  self.invalidateViewMatrix();
+};
+
+Camera.prototype.getRotateX = function () {
+  return this._rotateX;
+};
+
+Camera.prototype.setRotateX = function (rotateX) {
+  var self = this,
+    maxRotateX = self._maxRotateX;
+  if (rotateX > maxRotateX) {
+    rotateX = maxRotateX;
+  }
+  if (rotateX < -maxRotateX) {
+    rotateX = -maxRotateX;
+  }
+  self._rotateX = rotateX;
+  self.invalidateViewMatrix();
+};
+
+Camera.prototype.getRotateY = function () {
+  return this._rotateY;
+};
+
+Camera.prototype.setRotateY = function (rotateY) {
+  var self = this;
+  rotateY = rotateY % (Math.PI * 2);
+  self._rotateY = rotateY;
+  self.invalidateViewMatrix();
 };
 
 Camera.prototype.getViewMatrix = function () {
@@ -127,4 +163,56 @@ Camera.prototype.getProjectMatrix = function () {
     self._projectDirty = false;
   }
   return projectMatix;
+};
+
+Camera.prototype.getFovy = function () {
+  return this._fovy;
+};
+
+Camera.prototype.setFovy = function (fovy) {
+  var self = this;
+  self._fovy = fovy;
+  self.invalidateProjectMatrix();
+};
+
+Camera.prototype.getAspect = function () {
+  return this._aspect;
+};
+
+Camera.prototype.setAspect = function (aspect) {
+  var self = this;
+  self._aspect = aspect;
+  self.invalidateProjectMatrix();
+};
+
+Camera.prototype.getNear = function () {
+  return this._near;
+};
+
+Camera.prototype.setNear = function (near) {
+  var self = this;
+  self._near = near;
+  self.invalidateProjectMatrix();
+};
+
+Camera.prototype.getFar = function () {
+  return this._far;
+};
+
+Camera.prototype.setFar = function (far) {
+  var self = this;
+  self._far = far;
+  self.invalidateProjectMatrix();
+};
+
+Camera.prototype.invalidateViewMatrix = function () {
+  var self = this;
+  self._viewDirty = true;
+  self._callback();
+};
+
+Camera.prototype.invalidateProjectMatrix = function () {
+  var self = this;
+  self._projectDirty = true;
+  self._callback();
 };

@@ -19,7 +19,7 @@ varying vec2 v_uv;
 void main () {
   gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
   v_position = (u_modelMatrix * a_position).xyz;
-  v_normal = normalize(u_normalMatrix * a_normal);
+  v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv;
 }`;
 
@@ -41,7 +41,7 @@ void main () {
   vec3 normal = normalize(v_normal);
   vec3 lightDirection = normalize(u_lightPosition - v_position);
   float nDotL = max(dot(lightDirection, normal), 0.0);
-  vec4 color = texture2D(u_sampler, v_uv);
+  vec4 color = vec4(1, 0, 0, 1);//texture2D(u_sampler, v_uv);
   vec3 diffuse = u_lightColor * color.rgb * nDotL;
   vec3 ambient = u_ambientColor * color.rgb;
   gl_FragColor = vec4(diffuse + ambient, color.a);
@@ -68,7 +68,8 @@ var Scene = wg.Scene = function (canvas, options) {
   self._clearColor = [0, 0, 0, 0];
 
   var gl = self._gl = canvas.getContext('webgl', options || {
-    antialias: true
+    antialias: true,
+    stencil: true
   });
   addVertexArrayObjectSupport(gl);
   gl.cache = {};
@@ -76,6 +77,7 @@ var Scene = wg.Scene = function (canvas, options) {
     vertex: VERTEX_SHADER_SOURCE,
     fragment: FRAGMENT_SHADER_SOURCE
   });
+  self._outlineEffect = new OutlineEffect(gl, self);
 
   gl.initingTextures = {};
   // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
@@ -97,75 +99,7 @@ var Scene = wg.Scene = function (canvas, options) {
   });
 
   function init () {
-    gl.cache.quadVao = new VertexArrayObject(gl, {
-      buffers: {
-        position: {
-          array: [
-            // First triangle
-             1.0,  1.0,
-            -1.0,  1.0,
-            -1.0, -1.0,
-            // Second triangle
-            -1.0, -1.0,
-             1.0, -1.0,
-             1.0,  1.0
-          ],
-          index: 0,
-          size: 2
-        }
-      }
-    });
-    gl.cache.vaos = {};
-    gl.cache.vaos['cube'] = new VertexArrayObject(gl, {
-      buffers: {
-        position: {
-          array: [
-            -0.5, 0.5,-0.5,  -0.5, 0.5, 0.5,   0.5, 0.5, 0.5,   0.5, 0.5,-0.5,  // v6-v1-v0-v5 up
-            -0.5, 0.5, 0.5,  -0.5,-0.5, 0.5,   0.5,-0.5, 0.5,   0.5, 0.5, 0.5,  // v1-v2-v3-v0 front
-             0.5, 0.5, 0.5,   0.5,-0.5, 0.5,   0.5,-0.5,-0.5,   0.5, 0.5,-0.5,  // v0-v3-v4-v5 right
-             0.5, 0.5,-0.5,   0.5,-0.5,-0.5,  -0.5,-0.5,-0.5,  -0.5, 0.5,-0.5,  // v5-v4-v7-v6 back
-            -0.5, 0.5,-0.5,  -0.5,-0.5,-0.5,  -0.5,-0.5, 0.5,  -0.5, 0.5, 0.5,  // v6-v7-v2-v1 left
-            -0.5,-0.5, 0.5,  -0.5,-0.5,-0.5,   0.5,-0.5,-0.5,   0.5,-0.5, 0.5   // v2-v7-v4-v3 down
-          ],
-          index: 0,
-          size: 3
-        },
-        normal: {
-          array: [
-             0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,  // v1-v0-v5-v6 up
-             0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,  // v2-v3－v0-v1 front
-             1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,  // v3-v4-v5-v0 right
-             0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0,  // v4-v7-v6-v5 back
-            -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  // v7-v2-v1-v6 left
-             0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0   // v7-v4-v3-v2 down
-          ],
-          index: 1,
-          size: 3
-        },
-        uv: {
-          array: [
-            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v6-v1-v0-v5 up
-            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v1-v2-v3-v0 front
-            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v0-v3-v4-v5 right
-            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v5-v4-v7-v6 back
-            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0,    // v6-v7-v2-v1 left
-            0.0, 1.0,   0.0, 0.0,   1.0, 0.0,   1.0, 1.0     // v2-v7-v4-v3 down
-          ],
-          index: 2,
-          size: 2
-        },
-        index: {
-          array: [
-             0, 1, 2,   2, 3, 0,    // up
-             4, 5, 6,   6, 7, 4,    // front
-             8, 9,10,  10,11, 8,    // right
-            12,13,14,  14,15,12,    // back
-            16,17,18,  18,19,16,    // left
-            20,21,22,  22,23,20     // down
-          ]
-        }
-      },
-    });
+    createVaos(gl);
     gl.enable(gl.CULL_FACE);
     // gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
@@ -221,6 +155,8 @@ Scene.prototype.draw = function () {
       vao.draw();
     }
   });
+
+  self._outlineEffect.pass();
 };
 
 Scene.prototype.add = function (object) {

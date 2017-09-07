@@ -1,0 +1,140 @@
+var VERTEX_SHADER_OUTLINE = `
+# ifdef GL_ES
+  precision highp float;
+# endif
+
+attribute vec4 a_position;
+attribute vec3 a_normal;
+
+uniform mat4 u_viewProjectMatrix;
+uniform mat4 u_modelMatrix;
+uniform float u_outlineWidth;
+uniform bool u_outline;
+
+void main() {
+  // http://slides.com/xeolabs/silhouettes-in-webgl#/5
+  mat4 mvpMatrix = u_viewProjectMatrix * u_modelMatrix;
+  vec4 position = mvpMatrix * a_position;
+  float offset = ((u_outline ? u_outlineWidth : 0.0) + 1.0) * (position.z / 500.0);
+  gl_Position = mvpMatrix * vec4(a_position.xyz + a_normal * offset, 1.0);
+}
+`;
+
+var FRAGMENT_SHADER_OUTLINE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+uniform vec3 u_outlineColor;
+
+void main() {
+  gl_FragColor = vec4(u_outlineColor, 1.0);
+}
+`;
+
+var OutlineEffect = wg.OutlineEffect = function (gl, scene) {
+  var self = this;
+
+  self._gl = gl;
+  self._scene = scene;
+  self._outlineColor = [1, 153/255, 51/255]; // CMYK(0, 40, 80, 0)
+  self._outlineWidth = 4;
+
+  self._program = new Program(gl, {
+    vertex: VERTEX_SHADER_OUTLINE,
+    fragment: FRAGMENT_SHADER_OUTLINE
+  });
+};
+
+OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
+  var self = this,
+    gl = self._gl,
+    scene = self._scene,
+    program = self._program;
+
+  if (outputFrameBuffer) {
+    outputFrameBuffer.bind();
+  }
+
+  program.use();
+  var viewProjectMatrix = mat4.create();
+  mat4.multiply(
+    viewProjectMatrix,
+    scene._camera.getProjectMatrix(),
+    scene._camera.getViewMatrix()
+  );
+  program.setUniforms({
+    u_outlineColor: self._outlineColor,
+    u_outlineWidth: self._outlineWidth,
+    u_viewProjectMatrix: viewProjectMatrix,
+    u_outline: false
+  });
+
+  gl.enable(gl.STENCIL_TEST);
+  gl.clear(gl.STENCIL_BUFFER_BIT);
+  // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/stencilFunc
+  // func, ref, mask
+  gl.stencilFunc(gl.ALWAYS, 1, -1);
+  // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/stencilOp
+  // fail, zfail, zpass
+  gl.stencilOp(gl.REPLACE, gl.REPLACE, gl.REPLACE);
+  // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/stencilMask
+  // mask
+  gl.stencilMask(-1);
+  // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/colorMask
+  gl.colorMask(false, false, false, false);
+
+  scene._objects.forEach(function (object) {
+    if (object.outline) {
+      var vao = gl.cache.vaos[object.type];
+      if (vao) {
+        program.setUniforms({
+          u_modelMatrix: object.modelMatrix
+        });
+        vao.draw();
+      }
+    }
+  });
+
+  program.setUniforms({
+    u_outline: true
+  });
+
+  gl.stencilFunc(gl.EQUAL, 0, -1);
+  gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+  gl.colorMask(true, true, true, true);
+
+  scene._objects.forEach(function (object) {
+    if (object.outline) {
+      var vao = gl.cache.vaos[object.type];
+      if (vao) {
+        program.setUniforms({
+          u_modelMatrix: object.modelMatrix
+        });
+        vao.draw();
+      }
+    }
+  });
+
+  gl.disable(gl.STENCIL_TEST);
+};
+
+OutlineEffect.prototype.getOutputTexture = function () {
+  return null;
+};
+
+OutlineEffect.prototype.setOutlineColor = function (outlineColor) {
+  this._outlineColor = outlineColor;
+};
+
+OutlineEffect.prototype.getOutlineColor = function () {
+  return this._outlineColor;
+};
+
+OutlineEffect.prototype.setOutlineWidth = function (outlineWidth) {
+  this._outlineWidth = outlineWidth;
+};
+
+OutlineEffect.prototype.getOutlineWidth = function () {
+  return this._outlineWidth;
+};

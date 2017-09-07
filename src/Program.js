@@ -1,3 +1,10 @@
+var attributesMap = {
+  position: { index: 0, size: 3 },
+  normal: { index: 1, size: 3 },
+  uv: { index: 2, size: 2 },
+  color: { index: 3, size: 4 },
+};
+
 var Program = wg.Program = function (gl, options) {
   var self = this;
 
@@ -27,11 +34,9 @@ var Program = wg.Program = function (gl, options) {
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
 
-    // http://stackoverflow.com/questions/20305231/webgl-warning-attribute-0-is-disabled-this-has-significant-performance-penalt
-    // TODO
-    gl.bindAttribLocation(program, 0, 'a_position');
-    gl.bindAttribLocation(program, 1, 'a_normal');
-    gl.bindAttribLocation(program, 2, 'a_uv');
+    Object.keys(attributesMap).forEach(function (attribute) {
+      gl.bindAttribLocation(program, attributesMap[attribute].index, 'a_' + attribute);
+    });
     gl.linkProgram(program);
 
     // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Shaders_and_Programs
