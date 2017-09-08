@@ -125,7 +125,7 @@ var initWebGL = Util.initWebGL = function (canvas, options, initWebglFunc) {
   return gl;
 };
 
-var createCube = Util.createCube = function (side, color) {
+var createCube = Util.createCube = function (side) {
   var hs = side * 0.5;
   var pos = [
     -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,  hs,
@@ -143,15 +143,6 @@ var createCube = Util.createCube = function (side, color) {
      1.0, -1.0, -1.0,  1.0,  1.0, -1.0,  1.0,  1.0,  1.0,  1.0, -1.0,  1.0,
     -1.0, -1.0, -1.0, -1.0, -1.0,  1.0, -1.0,  1.0,  1.0, -1.0,  1.0, -1.0
   ];
-  var col = new Array();
-  for(var i = 0; i < pos.length / 3; i++){
-    if(color){
-      var tc = color;
-    }else{
-      tc = hsva(360 / pos.length / 3 * i, 1, 1, 1);
-    }
-    col.push(tc[0], tc[1], tc[2], tc[3]);
-  }
   var st = [
     0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
     0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
@@ -168,13 +159,12 @@ var createCube = Util.createCube = function (side, color) {
     16, 17, 18, 16, 18, 19,
     20, 21, 22, 20, 22, 23
   ];
-  return {position : pos, normal : nor, color : col, uv : st, index : idx};
+  return {position : pos, normal : nor, uv : st, index : idx};
 };
 
-var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
+var createTorus = Util.createTorus = function (row, column, irad, orad) {
   var pos = new Array(),
     nor = new Array(),
-    col = new Array(),
     st = new Array(),
     idx = new Array();
   for (var i = 0; i <= row; i++) {
@@ -188,11 +178,6 @@ var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
       var tz = (rr * irad + orad) * Math.sin(tr);
       var rx = rr * Math.cos(tr);
       var rz = rr * Math.sin(tr);
-      if (color) {
-        var tc = color;
-      } else {
-        tc = hsva(360 / column * ii, 1, 1, 1);
-      }
       var rs = 1 / column * ii;
       var rt = 1 / row * i + 0.5;
       if (rt > 1.0) {
@@ -201,7 +186,6 @@ var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
       rt = 1.0 - rt;
       pos.push(tx, ty, tz);
       nor.push(rx, ry, rz);
-      col.push(tc[0], tc[1], tc[2], tc[3]);
       st.push(rs, rt);
     }
   }
@@ -215,7 +199,6 @@ var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
   return {
     position: pos,
     normal: nor,
-    color: col,
     uv: st,
     index: idx
   };
@@ -423,7 +406,7 @@ Program.prototype.setUniform = function (name, value) {
     uniform = uniforms[name],
     type, location;
 
-  if (!uniform) {
+  if (!uniform || value == null) {
     return;
   }
 
@@ -735,6 +718,10 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
       if (!self._index) {
         self._count = buffer.length / attribute.size;
       }
+    }
+
+    if (attrName === 'color') {
+      self._color = true;
     }
 
     if (attrName === 'index') {
@@ -1345,16 +1332,18 @@ attribute vec3 a_normal;
 uniform mat4 u_viewProjectMatrix;
 uniform mat4 u_modelMatrix;
 uniform float u_outlineWidth;
+uniform float u_outlineGap;
 uniform bool u_outline;
 
 void main() {
   // http://slides.com/xeolabs/silhouettes-in-webgl#/5
   mat4 mvpMatrix = u_viewProjectMatrix * u_modelMatrix;
   vec4 position = mvpMatrix * a_position;
-  float offset = ((u_outline ? u_outlineWidth : 0.0) + 1.0) * (position.z / 500.0);
+  float offset = ((u_outline ? u_outlineWidth : 0.0) + u_outlineGap) * (position.z / 500.0);
   gl_Position = mvpMatrix * vec4(a_position.xyz + a_normal * offset, 1.0);
 }
 `;
+
 var FRAGMENT_SHADER_OUTLINE = `
 #ifdef GL_ES
   precision highp float;
@@ -1374,6 +1363,7 @@ var OutlineEffect = wg.OutlineEffect = function (gl, scene) {
   self._scene = scene;
   self._outlineColor = [1, 153/255, 51/255]; // CMYK(0, 40, 80, 0)
   self._outlineWidth = 4;
+  self._outlineGap = 1;
 
   self._program = new Program(gl, {
     vertex: VERTEX_SHADER_OUTLINE,
@@ -1401,6 +1391,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   program.setUniforms({
     u_outlineColor: self._outlineColor,
     u_outlineWidth: self._outlineWidth,
+    u_outlineGap: self._outlineGap,
     u_viewProjectMatrix: viewProjectMatrix,
     u_outline: false
   });
@@ -1472,6 +1463,14 @@ OutlineEffect.prototype.setOutlineWidth = function (outlineWidth) {
 
 OutlineEffect.prototype.getOutlineWidth = function () {
   return this._outlineWidth;
+};
+
+OutlineEffect.prototype.setOutlineGap = function (outlineGap) {
+  this._outlineGap = outlineGap;
+};
+
+OutlineEffect.prototype.getOutlineGap = function () {
+  return this._outlineGap;
 };
 
 // Source: src/Camera.js
@@ -1703,22 +1702,33 @@ var VERTEX_SHADER_SOURCE = `
 attribute vec4 a_position;
 attribute vec3 a_normal;
 attribute vec2 a_uv;
+attribute vec4 a_color;
 
 uniform mat4 u_projectMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat4 u_modelMatrix;
 uniform mat3 u_normalMatrix;
 
+uniform vec3 u_lightPosition;
+uniform vec3 u_eyePosition;
+
 varying vec3 v_normal;
-varying vec3 v_position;
 varying vec2 v_uv;
+varying vec4 v_color;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
   gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
-  v_position = (u_modelMatrix * a_position).xyz;
   v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv;
-}`;
+  v_color = a_color;
+
+  vec3 worldPosition = (u_modelMatrix * a_position).xyz;
+  v_lightDirection = u_lightPosition - worldPosition;
+  v_eyeDirection = u_eyePosition - worldPosition;
+}
+`;
 
 var FRAGMENT_SHADER_SOURCE = `
 #ifdef GL_ES
@@ -1726,24 +1736,38 @@ var FRAGMENT_SHADER_SOURCE = `
 #endif
 
 uniform vec3 u_lightColor;
-uniform vec3 u_lightPosition;
 uniform vec3 u_ambientColor;
+uniform bool u_texture;
 uniform sampler2D u_sampler;
 
 varying vec3 v_normal;
-varying vec3 v_position;
 varying vec2 v_uv;
+varying vec4 v_color;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
   vec3 normal = normalize(v_normal);
-  vec3 lightDirection = normalize(u_lightPosition - v_position);
-  float nDotL = max(dot(lightDirection, normal), 0.0);
-  vec4 color = vec4(1, 0, 0, 1);//texture2D(u_sampler, v_uv);
-  vec3 diffuse = u_lightColor * color.rgb * nDotL;
-  vec3 ambient = u_ambientColor * color.rgb;
-  gl_FragColor = vec4(diffuse + ambient, color.a);
-  // gl_FragColor = vec4(1, 0, 0, 1);
-}`;
+  vec3 lightDirection = normalize(v_lightDirection);
+  vec3 eyeDirection = normalize(v_eyeDirection);
+  float diffuse = max(dot(lightDirection, normal), 0.0);
+
+  vec3 halfDirection = normalize(lightDirection + eyeDirection);
+  float specular = pow(max(dot(halfDirection, normal), 0.0), 24.0);
+
+  // vec3 reflectDirection = reflect(-lightDirection, normal);
+  // float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 8.0);
+
+  vec4 color = v_color;
+  if (u_texture) {
+    color *= texture2D(u_sampler, v_uv);
+  }
+  vec3 ambientColor = u_ambientColor * color.rgb;
+  vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
+  vec3 specularColor = u_lightColor * color.rgb * specular;
+  gl_FragColor = vec4(diffuseColor + ambientColor + specularColor, color.a);
+}
+`;
 
 var Scene = wg.Scene = function (canvas, options) {
   var self = this;
@@ -1761,7 +1785,7 @@ var Scene = wg.Scene = function (canvas, options) {
   });
   self._lightColor = [1, 1, 1];
   self._lightPosition = [10, 10, 10];
-  self._ambientColor = [.3, .3, .3];
+  self._ambientColor = [.5, .5, .5];
   self._clearColor = [0, 0, 0, 0];
 
   var gl = self._gl = canvas.getContext('webgl', options || {
@@ -1769,7 +1793,7 @@ var Scene = wg.Scene = function (canvas, options) {
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
-  gl.cache = {};
+  gl.cache = { textures: {} };
   self._program = new Program(gl, {
     vertex: VERTEX_SHADER_SOURCE,
     fragment: FRAGMENT_SHADER_SOURCE
@@ -1801,12 +1825,6 @@ var Scene = wg.Scene = function (canvas, options) {
     // gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     // gl.depthFunc(gl.LEQUAL);
-    self._imageTexture = new wg.Texture(gl, {
-      url: 'images/crate.gif',
-      callback: function () {
-        self.redraw();
-      }
-    });
 
     (function render() {
       gl.aniamtionId = requestAnimationFrame(render);
@@ -1836,19 +1854,35 @@ Scene.prototype.draw = function () {
   program.setUniforms({
     u_projectMatrix: camera.getProjectMatrix(),
     u_viewMatrix: camera.getViewMatrix(),
-    u_lightColor: self._lightColor,
     u_lightPosition: self._lightPosition,
+    u_eyePosition: camera._position,
+    u_lightColor: self._lightColor,
     u_ambientColor: self._ambientColor
   });
   self._objects.forEach(function (object) {
-    var vao = self._gl.cache.vaos[object.type];
+    var vao = gl.cache.vaos[object.type];
     if (vao) {
       program.setUniforms({
         u_modelMatrix: object.modelMatrix,
         u_normalMatrix: object.normalMatrix,
-        u_sampler: 0
+        u_sampler: 0,
+        u_texture: !!object.image
       });
-      self._imageTexture.bind(0);
+      if (object.image) {
+        var imageTexture = gl.cache.textures[object.image];
+        if (!imageTexture) {
+          imageTexture = gl.cache.textures[object.image] = new wg.Texture(gl, {
+            url: object.image,
+            callback: function () {
+              self.redraw();
+            }
+          });
+        }
+        imageTexture.bind(0);
+      }
+      if (!vao._color) {
+        gl.vertexAttrib4fv(attributesMap.color.index, object.color);
+      }
       vao.draw();
     }
   });
@@ -1911,6 +1945,7 @@ wg.Object = function () {
   self.normalMatrix = mat3.create();
   self.type = null;
   self._position = vec3.create();
+  self.color = [1, 1, 1, 1];
 };
 
 wg.Object.prototype.setPosition = function (x, y, z) {

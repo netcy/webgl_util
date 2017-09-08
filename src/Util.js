@@ -122,7 +122,7 @@ var initWebGL = Util.initWebGL = function (canvas, options, initWebglFunc) {
   return gl;
 };
 
-var createCube = Util.createCube = function (side, color) {
+var createCube = Util.createCube = function (side) {
   var hs = side * 0.5;
   var pos = [
     -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,  hs,
@@ -140,15 +140,6 @@ var createCube = Util.createCube = function (side, color) {
      1.0, -1.0, -1.0,  1.0,  1.0, -1.0,  1.0,  1.0,  1.0,  1.0, -1.0,  1.0,
     -1.0, -1.0, -1.0, -1.0, -1.0,  1.0, -1.0,  1.0,  1.0, -1.0,  1.0, -1.0
   ];
-  var col = new Array();
-  for(var i = 0; i < pos.length / 3; i++){
-    if(color){
-      var tc = color;
-    }else{
-      tc = hsva(360 / pos.length / 3 * i, 1, 1, 1);
-    }
-    col.push(tc[0], tc[1], tc[2], tc[3]);
-  }
   var st = [
     0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
     0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
@@ -165,13 +156,12 @@ var createCube = Util.createCube = function (side, color) {
     16, 17, 18, 16, 18, 19,
     20, 21, 22, 20, 22, 23
   ];
-  return {position : pos, normal : nor, color : col, uv : st, index : idx};
+  return {position : pos, normal : nor, uv : st, index : idx};
 };
 
-var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
+var createTorus = Util.createTorus = function (row, column, irad, orad) {
   var pos = new Array(),
     nor = new Array(),
-    col = new Array(),
     st = new Array(),
     idx = new Array();
   for (var i = 0; i <= row; i++) {
@@ -185,11 +175,6 @@ var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
       var tz = (rr * irad + orad) * Math.sin(tr);
       var rx = rr * Math.cos(tr);
       var rz = rr * Math.sin(tr);
-      if (color) {
-        var tc = color;
-      } else {
-        tc = hsva(360 / column * ii, 1, 1, 1);
-      }
       var rs = 1 / column * ii;
       var rt = 1 / row * i + 0.5;
       if (rt > 1.0) {
@@ -198,7 +183,6 @@ var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
       rt = 1.0 - rt;
       pos.push(tx, ty, tz);
       nor.push(rx, ry, rz);
-      col.push(tc[0], tc[1], tc[2], tc[3]);
       st.push(rs, rt);
     }
   }
@@ -212,7 +196,6 @@ var createTorus = Util.createTorus = function (row, column, irad, orad, color) {
   return {
     position: pos,
     normal: nor,
-    color: col,
     uv: st,
     index: idx
   };

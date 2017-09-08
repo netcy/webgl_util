@@ -27,6 +27,10 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
       }
     }
 
+    if (attrName === 'color') {
+      self._color = true;
+    }
+
     if (attrName === 'index') {
       self._index = true;
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufferObject);

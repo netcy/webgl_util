@@ -6,6 +6,7 @@ wg.Object = function () {
   self.normalMatrix = mat3.create();
   self.type = null;
   self._position = vec3.create();
+  self.color = [1, 1, 1, 1];
 };
 
 wg.Object.prototype.setPosition = function (x, y, z) {

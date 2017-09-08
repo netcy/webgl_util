@@ -9,13 +9,14 @@ attribute vec3 a_normal;
 uniform mat4 u_viewProjectMatrix;
 uniform mat4 u_modelMatrix;
 uniform float u_outlineWidth;
+uniform float u_outlineGap;
 uniform bool u_outline;
 
 void main() {
   // http://slides.com/xeolabs/silhouettes-in-webgl#/5
   mat4 mvpMatrix = u_viewProjectMatrix * u_modelMatrix;
   vec4 position = mvpMatrix * a_position;
-  float offset = ((u_outline ? u_outlineWidth : 0.0) + 1.0) * (position.z / 500.0);
+  float offset = ((u_outline ? u_outlineWidth : 0.0) + u_outlineGap) * (position.z / 500.0);
   gl_Position = mvpMatrix * vec4(a_position.xyz + a_normal * offset, 1.0);
 }
 `;
@@ -39,6 +40,7 @@ var OutlineEffect = wg.OutlineEffect = function (gl, scene) {
   self._scene = scene;
   self._outlineColor = [1, 153/255, 51/255]; // CMYK(0, 40, 80, 0)
   self._outlineWidth = 4;
+  self._outlineGap = 1;
 
   self._program = new Program(gl, {
     vertex: VERTEX_SHADER_OUTLINE,
@@ -66,6 +68,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   program.setUniforms({
     u_outlineColor: self._outlineColor,
     u_outlineWidth: self._outlineWidth,
+    u_outlineGap: self._outlineGap,
     u_viewProjectMatrix: viewProjectMatrix,
     u_outline: false
   });
@@ -137,4 +140,12 @@ OutlineEffect.prototype.setOutlineWidth = function (outlineWidth) {
 
 OutlineEffect.prototype.getOutlineWidth = function () {
   return this._outlineWidth;
+};
+
+OutlineEffect.prototype.setOutlineGap = function (outlineGap) {
+  this._outlineGap = outlineGap;
+};
+
+OutlineEffect.prototype.getOutlineGap = function () {
+  return this._outlineGap;
 };

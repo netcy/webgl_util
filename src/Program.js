@@ -110,7 +110,7 @@ Program.prototype.setUniform = function (name, value) {
     uniform = uniforms[name],
     type, location;
 
-  if (!uniform) {
+  if (!uniform || value == null) {
     return;
   }
 

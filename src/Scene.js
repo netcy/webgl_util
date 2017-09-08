@@ -6,22 +6,33 @@ var VERTEX_SHADER_SOURCE = `
 attribute vec4 a_position;
 attribute vec3 a_normal;
 attribute vec2 a_uv;
+attribute vec4 a_color;
 
 uniform mat4 u_projectMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat4 u_modelMatrix;
 uniform mat3 u_normalMatrix;
 
+uniform vec3 u_lightPosition;
+uniform vec3 u_eyePosition;
+
 varying vec3 v_normal;
-varying vec3 v_position;
 varying vec2 v_uv;
+varying vec4 v_color;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
   gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
-  v_position = (u_modelMatrix * a_position).xyz;
   v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv;
-}`;
+  v_color = a_color;
+
+  vec3 worldPosition = (u_modelMatrix * a_position).xyz;
+  v_lightDirection = u_lightPosition - worldPosition;
+  v_eyeDirection = u_eyePosition - worldPosition;
+}
+`;
 
 var FRAGMENT_SHADER_SOURCE = `
 #ifdef GL_ES
@@ -29,24 +40,38 @@ var FRAGMENT_SHADER_SOURCE = `
 #endif
 
 uniform vec3 u_lightColor;
-uniform vec3 u_lightPosition;
 uniform vec3 u_ambientColor;
+uniform bool u_texture;
 uniform sampler2D u_sampler;
 
 varying vec3 v_normal;
-varying vec3 v_position;
 varying vec2 v_uv;
+varying vec4 v_color;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
   vec3 normal = normalize(v_normal);
-  vec3 lightDirection = normalize(u_lightPosition - v_position);
-  float nDotL = max(dot(lightDirection, normal), 0.0);
-  vec4 color = vec4(1, 0, 0, 1);//texture2D(u_sampler, v_uv);
-  vec3 diffuse = u_lightColor * color.rgb * nDotL;
-  vec3 ambient = u_ambientColor * color.rgb;
-  gl_FragColor = vec4(diffuse + ambient, color.a);
-  // gl_FragColor = vec4(1, 0, 0, 1);
-}`;
+  vec3 lightDirection = normalize(v_lightDirection);
+  vec3 eyeDirection = normalize(v_eyeDirection);
+  float diffuse = max(dot(lightDirection, normal), 0.0);
+
+  vec3 halfDirection = normalize(lightDirection + eyeDirection);
+  float specular = pow(max(dot(halfDirection, normal), 0.0), 24.0);
+
+  // vec3 reflectDirection = reflect(-lightDirection, normal);
+  // float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 8.0);
+
+  vec4 color = v_color;
+  if (u_texture) {
+    color *= texture2D(u_sampler, v_uv);
+  }
+  vec3 ambientColor = u_ambientColor * color.rgb;
+  vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
+  vec3 specularColor = u_lightColor * color.rgb * specular;
+  gl_FragColor = vec4(diffuseColor + ambientColor + specularColor, color.a);
+}
+`;
 
 var Scene = wg.Scene = function (canvas, options) {
   var self = this;
@@ -64,7 +89,7 @@ var Scene = wg.Scene = function (canvas, options) {
   });
   self._lightColor = [1, 1, 1];
   self._lightPosition = [10, 10, 10];
-  self._ambientColor = [.3, .3, .3];
+  self._ambientColor = [.5, .5, .5];
   self._clearColor = [0, 0, 0, 0];
 
   var gl = self._gl = canvas.getContext('webgl', options || {
@@ -72,7 +97,7 @@ var Scene = wg.Scene = function (canvas, options) {
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
-  gl.cache = {};
+  gl.cache = { textures: {} };
   self._program = new Program(gl, {
     vertex: VERTEX_SHADER_SOURCE,
     fragment: FRAGMENT_SHADER_SOURCE
@@ -104,12 +129,6 @@ var Scene = wg.Scene = function (canvas, options) {
     // gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     // gl.depthFunc(gl.LEQUAL);
-    self._imageTexture = new wg.Texture(gl, {
-      url: 'images/crate.gif',
-      callback: function () {
-        self.redraw();
-      }
-    });
 
     (function render() {
       gl.aniamtionId = requestAnimationFrame(render);
@@ -139,19 +158,35 @@ Scene.prototype.draw = function () {
   program.setUniforms({
     u_projectMatrix: camera.getProjectMatrix(),
     u_viewMatrix: camera.getViewMatrix(),
-    u_lightColor: self._lightColor,
     u_lightPosition: self._lightPosition,
+    u_eyePosition: camera._position,
+    u_lightColor: self._lightColor,
     u_ambientColor: self._ambientColor
   });
   self._objects.forEach(function (object) {
-    var vao = self._gl.cache.vaos[object.type];
+    var vao = gl.cache.vaos[object.type];
     if (vao) {
       program.setUniforms({
         u_modelMatrix: object.modelMatrix,
         u_normalMatrix: object.normalMatrix,
-        u_sampler: 0
+        u_sampler: 0,
+        u_texture: !!object.image
       });
-      self._imageTexture.bind(0);
+      if (object.image) {
+        var imageTexture = gl.cache.textures[object.image];
+        if (!imageTexture) {
+          imageTexture = gl.cache.textures[object.image] = new wg.Texture(gl, {
+            url: object.image,
+            callback: function () {
+              self.redraw();
+            }
+          });
+        }
+        imageTexture.bind(0);
+      }
+      if (!vao._color) {
+        gl.vertexAttrib4fv(attributesMap.color.index, object.color);
+      }
       vao.draw();
     }
   });
