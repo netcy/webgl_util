@@ -20,6 +20,7 @@ module.exports = function (grunt) {
       'src/TiltShiftEffect.js',
       'src/ZoomBlurEffect.js',
       'src/OutlineEffect.js',
+      'src/GlowEffect.js',
       'src/Camera.js',
       'src/Scene.js',
       'src/Object.js',

@@ -43,10 +43,8 @@ void main () {
     if (i >= blurAmount) {
       break;
     }
-
     float offset = i - halfBlur;
     vec2 vOffset = v_uv + (texelOffset * offset);
-
     color += texture2D(u_sampler, vOffset);
   }
 

@@ -56,11 +56,11 @@ void main () {
   vec3 eyeDirection = normalize(v_eyeDirection);
   float diffuse = max(dot(lightDirection, normal), 0.0);
 
-  vec3 halfDirection = normalize(lightDirection + eyeDirection);
-  float specular = pow(max(dot(halfDirection, normal), 0.0), 24.0);
+  // vec3 halfDirection = normalize(lightDirection + eyeDirection);
+  // float specular = pow(max(dot(halfDirection, normal), 0.0), 24.0);
 
-  // vec3 reflectDirection = reflect(-lightDirection, normal);
-  // float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 8.0);
+  vec3 reflectDirection = reflect(-lightDirection, normal);
+  float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
 
   vec4 color = v_color;
   if (u_texture) {
@@ -68,7 +68,7 @@ void main () {
   }
   vec3 ambientColor = u_ambientColor * color.rgb;
   vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-  vec3 specularColor = u_lightColor * color.rgb * specular;
+  vec3 specularColor = u_lightColor * specular;
   gl_FragColor = vec4(diffuseColor + ambientColor + specularColor, color.a);
 }
 `;
@@ -103,6 +103,7 @@ var Scene = wg.Scene = function (canvas, options) {
     fragment: FRAGMENT_SHADER_SOURCE
   });
   self._outlineEffect = new OutlineEffect(gl, self);
+  self._glowEffect = new GlowEffect(gl, self);
 
   gl.initingTextures = {};
   // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
@@ -192,6 +193,7 @@ Scene.prototype.draw = function () {
   });
 
   self._outlineEffect.pass();
+  self._glowEffect.pass();
 };
 
 Scene.prototype.add = function (object) {

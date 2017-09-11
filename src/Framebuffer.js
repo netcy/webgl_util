@@ -58,7 +58,7 @@ Framebuffer.prototype.bind = function () {
     gl = self._gl;
   gl.bindFramebuffer(gl.FRAMEBUFFER, self._framebuffer);
   gl.viewport(0, 0, self._width, self._height);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 };
 
 Framebuffer.prototype.bindTexture = function (unit) {
