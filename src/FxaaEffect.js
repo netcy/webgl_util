@@ -103,13 +103,15 @@ void main() {
 }
 `;
 
-var FxaaEffect = wg.FxaaEffect = function (gl) {
-  var self = this;
+var FxaaEffect = wg.FxaaEffect = function (scene) {
+  var self = this,
+    gl;
 
-  self._gl = gl;
-  self._enabled = 0;
+  self._scene = scene;
+  gl = self._gl = scene._gl;
+  self._enabled = false;
 
-  self._program = new wg.Program(gl, {
+  self._program = new Program(gl, {
     vertex: VERTEX_SHADER_FXAA,
     fragment: FRAGMENT_SHADER_FXAA
   });

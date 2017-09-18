@@ -33,11 +33,12 @@ void main() {
 }
 `;
 
-var OutlineEffect = wg.OutlineEffect = function (gl, scene) {
-  var self = this;
+var OutlineEffect = wg.OutlineEffect = function (scene) {
+  var self = this,
+    gl;
 
-  self._gl = gl;
   self._scene = scene;
+  gl = self._gl = scene._gl;
   self._outlineColor = [1, 153/255, 51/255]; // CMYK(0, 40, 80, 0)
   self._outlineWidth = 4;
   self._outlineGap = 1;
@@ -92,7 +93,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
       var vao = gl.cache.vaos[object.type];
       if (vao) {
         program.setUniforms({
-          u_modelMatrix: object.modelMatrix
+          u_modelMatrix: object.getModelMatrix()
         });
         vao.draw();
       }
@@ -112,7 +113,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
       var vao = gl.cache.vaos[object.type];
       if (vao) {
         program.setUniforms({
-          u_modelMatrix: object.modelMatrix
+          u_modelMatrix: object.getModelMatrix()
         });
         vao.draw();
       }

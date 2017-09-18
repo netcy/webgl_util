@@ -13,6 +13,9 @@
  *     magFilter: default 'LINEAR'
  *     wrapS: default 'CLAMP_TO_EDGE'
  *     wrapT: default 'CLAMP_TO_EDGE'
+ *     anisotropy: default 16
+ *     dataType: default 'UNSIGNED_BYTE'
+ *     format: default 'RGBA'
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
@@ -24,11 +27,11 @@ var Texture = wg.Texture = function (gl, options) {
     self._initialized = false;
   self._imageLoaded = false;
   self._texture = gl.createTexture();
+  self._unit = 0;
 
   if (url) {
     var image = self._image = new Image();
     gl.initingTextures[url] = image;
-    image.src = url;
     image.onload = function () {
       image.onload = null;
       image.onerror = null;
@@ -44,6 +47,7 @@ var Texture = wg.Texture = function (gl, options) {
 
       callback && callback();
     };
+    image.src = url;
   }
 };
 
@@ -52,6 +56,7 @@ Texture.prototype.bind = function (unit) {
     gl = self._gl,
     options = self._options,
     width, height;
+  self._unit = unit;
   gl.activeTexture(gl.TEXTURE0 + unit);
   gl.bindTexture(gl.TEXTURE_2D, self._texture);
 
@@ -88,12 +93,12 @@ Texture.prototype.bind = function (unit) {
       gl.texImage2D(
         gl.TEXTURE_2D,
         0,
-        gl.RGBA,
+        gl[options.format || 'RGBA'],
         width,
         height,
         0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
+        gl[options.format || 'RGBA'],
+        gl[options.dataType || 'UNSIGNED_BYTE'],
         null
       );
     } else {
@@ -115,6 +120,12 @@ Texture.prototype.bind = function (unit) {
 
   if (self._imageLoaded) {
     self._imageLoaded = false;
+    // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
+    if (gl._anisotropicExt) {
+      var anisotropy = options.anisotropy || 16;
+      anisotropy = Math.min(gl._max_anisotropy, anisotropy);
+      gl.texParameterf(gl.TEXTURE_2D, gl._anisotropicExt.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
+    }
     gl.pixelStorei(
       gl.UNPACK_FLIP_Y_WEBGL,
       (options.flipY == null ? true : options.flipY) ? 1 : 0
@@ -142,6 +153,8 @@ Texture.prototype.bind = function (unit) {
 
 Texture.prototype.dispose = function () {
   var self = this;
+  self._gl.activeTexture(gl.TEXTURE0 + self._unit);
+  gl.bindTexture(gl.TEXTURE_2D, null);
   self._gl.deleteTexture(self._texture);
   self._texture = null;
 };

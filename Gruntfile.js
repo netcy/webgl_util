@@ -21,6 +21,7 @@ module.exports = function (grunt) {
       'src/ZoomBlurEffect.js',
       'src/OutlineEffect.js',
       'src/GlowEffect.js',
+      'src/SSAOEffect.js',
       'src/Camera.js',
       'src/Scene.js',
       'src/Object.js',

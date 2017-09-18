@@ -1,5 +1,7 @@
 var wg = root.wg = {};
-var Util = wg.Util = {};
+var Util = wg.Util = {
+  version: '0.5.0'
+};
 
 var getClientPoint = Util.getClientPoint = function (e) {
   return {
@@ -156,6 +158,9 @@ var createCube = Util.createCube = function (side) {
     16, 17, 18, 16, 18, 19,
     20, 21, 22, 20, 22, 23
   ];
+  nor.forEach(function (n, i) {
+    nor[i] = -n;
+  });
   return {position : pos, normal : nor, uv : st, index : idx};
 };
 
@@ -237,13 +242,16 @@ var createSphere = Util.createSphere = function (row, column, rad) {
     uv: st,
     index: idx
   };
-}
+};
 
 function createVaos(gl) {
   gl.cache.quadVao = new VertexArrayObject(gl, {
     buffers: {
       position: [
-        1.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, -1.0, 0.0, -1.0, -1.0, 0.0,
+        1.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0,
         1.0, -1.0, 0.0,
         1.0, 1.0, 0.0
       ]
@@ -260,3 +268,20 @@ function createVaos(gl) {
     buffers: createSphere(32, 32, 1)
   });
 }
+
+var equalObject = Util.equalObject = function (a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  var keysA = Object.keys(a),
+    keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) {
+    return false;
+  }
+  return !keysA.some(function (key) {
+    return a[key] !== b[key];
+  });
+};

@@ -24,6 +24,7 @@ var Camera = wg.Camera = function (canvas, callback) {
   canvas.addEventListener('mousedown', handleMouseDown);
   canvas.addEventListener('wheel', handleWheel);
   canvas.addEventListener('blur', clean);
+  canvas.addEventListener('keydown', handleKeydown);
 
   var rotateSpeedY = 360 / canvas.width * window.devicePixelRatio / 180 * Math.PI,
     rotateSpeedX = 180 / canvas.height * window.devicePixelRatio / 180 * Math.PI,
@@ -64,6 +65,18 @@ var Camera = wg.Camera = function (canvas, callback) {
     lastPoint = null;
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', clean);
+  }
+
+  function handleKeydown (e) {
+    var keyCode = e.keyCode,
+      left = keyCode === 65 /*A*/ || keyCode === 37 /*Left*/,
+      right = keyCode === 68 /*D*/ || keyCode === 39 /*Right*/,
+      up = keyCode === 87 /*W*/ || keyCode === 38 /*Up*/,
+      down = keyCode === 83 /*S*/ || keyCode === 40 /*Down*/;
+    if (!left || !right || !up || !down) {
+      return;
+    }
+    // TODO
   }
 };
 

@@ -128,11 +128,12 @@ void main() {
 }
 `;
 
-var GlowEffect = wg.GlowEffect = function (gl, scene) {
-  var self = this;
+var GlowEffect = wg.GlowEffect = function (scene) {
+  var self = this,
+    gl;
 
-  self._gl = gl;
   self._scene = scene;
+  gl = self._gl = scene._gl;
   self._glowColor = [0, 1, 0];
   self._blurAmount = 20;
   self._blurScale = 1;
@@ -266,7 +267,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = gl.cache.vaos[object.type];
         if (vao) {
           self._colorProgram.setUniforms({
-            u_modelMatrix: object.modelMatrix
+            u_modelMatrix: object.getModelMatrix()
           });
           vao.draw();
         }
@@ -292,7 +293,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = gl.cache.vaos[object.type];
         if (vao) {
           self._colorProgram.setUniforms({
-            u_modelMatrix: object.modelMatrix
+            u_modelMatrix: object.getModelMatrix()
           });
           vao.draw();
         }

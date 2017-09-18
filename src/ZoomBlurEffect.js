@@ -65,7 +65,7 @@ var ZoomBlurEffect = wg.ZoomBlurEffect = function (gl) {
   self._center = [0, 0];
   self._strength = 0;
 
-  self._program = new wg.Program(gl, {
+  self._program = new Program(gl, {
     vertex: VERTEX_SHADER_ZOOM_BLUR,
     fragment: FRAGMENT_SHADER_ZOOM_BLUR
   });
