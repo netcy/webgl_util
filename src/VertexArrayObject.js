@@ -1,22 +1,27 @@
 /**
  * VertexArrayObject
- * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
+ * @param {[Scene]} scene Scene
  * @param {[Object]} options
  * @example
  *     buffers: { position: [], normal: [], uv: [], color: [], index: [] },
  *     offset: 0,
  *     mode: 'TRIANGLES'
  */
-var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
+var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
   var self = this,
-    buffers = options.buffers;
+    buffers = options.buffers,
+    gl;
 
-  self._gl = gl;
+  self._scene = scene;
+  gl = self._gl = scene._gl;
   self._vao = gl.createVertexArray();
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
     var attribute = attributesMap[attrName];
+    if (!attribute && attrName !== 'index') {
+      return;
+    }
     var buffer = buffers[attrName];
     var bufferObject = gl.createBuffer();
     var element_type, element_size, array;
@@ -65,6 +70,7 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
 
   self._offset = options.offset || 0;
   self._mode = gl[options.mode || 'TRIANGLES'];
+  self._buffers = options.buffers;
 };
 
 VertexArrayObject.prototype.draw = function () {
@@ -72,8 +78,37 @@ VertexArrayObject.prototype.draw = function () {
     gl = self._gl;
   gl.bindVertexArray(self._vao);
   if (self._index) {
-     // mode, count, type, offset
-    gl.drawElements(self._mode, self._count, self._element_type, self._offset * self._element_size);
+    if (self._buffers.parts) {
+      self._buffers.parts.forEach(function (part) {
+        self._scene._sceneProgram.setUniforms({
+          u_texture: !!part.image
+        });
+        if (part.image) {
+          var image = part.image;
+          if (!image.url) {
+            image = part.image = {
+              url: image
+            };
+          }
+          var imageTexture = image.texture;
+          if (!imageTexture) {
+            image.callback = function () {
+              self._scene.redraw();
+            };
+            imageTexture = image.texture = new Texture(gl, image);
+          }
+          imageTexture.bind(0);
+        } else {
+          gl.vertexAttrib4fv(attributesMap.color.index, part.color);
+        }
+        part.counts.forEach(function (item) {
+          gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
+        });
+      });
+    } else {
+       // mode, count, type, offset
+      gl.drawElements(self._mode, self._count, self._element_type, self._offset * self._element_size);
+    }
   } else {
     gl.drawArrays(self._mode, self._offset, self._count);
   }

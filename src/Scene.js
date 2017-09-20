@@ -73,14 +73,11 @@ void main () {
   vec3 reflectDirection = reflect(-lightDirection, normal);
   float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
 
-  vec4 color = v_color;
-  if (u_texture) {
-    color *= texture2D(u_sampler, v_uv);
-  }
+  vec4 color = u_texture ? texture2D(u_sampler, v_uv) : v_color;
   vec3 ambientColor = u_ambientColor * color.rgb;
   vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
   vec3 specularColor = u_lightColor * specular;
-  gl_FragColor = clamp(vec4(ambientColor + diffuseColor /*+ specularColor*/, color.a), 0.0, 1.0);
+  gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
 }
 `;
 
@@ -133,6 +130,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._lightPosition = [10, 10, 10];
   self._ambientColor = [.5, .5, .5];
   self._clearColor = [0, 0, 0, 0];
+  self._enableSSAO = false;
 
   var gl = self._gl = canvas.getContext('webgl', options || {
     antialias: false,
@@ -167,14 +165,26 @@ var Scene = wg.Scene = function (canvas, options) {
 
   function init () {
     gl.cache = { textures: {} };
-    createVaos(gl);
+    gl.cache.quadVao = new VertexArrayObject(self, {
+      buffers: {
+        position: [
+          1.0, 1.0, 0.0,
+          -1.0, 1.0, 0.0,
+          -1.0, -1.0, 0.0,
+          -1.0, -1.0, 0.0,
+          1.0, -1.0, 0.0,
+          1.0, 1.0, 0.0
+        ]
+      }
+    });
+    gl.cache.vaos = {};
     // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.CULL_FACE);
 
-    self._emptyTexture = new Texture(gl, {
+    gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
       height: 1
     });
@@ -238,7 +248,7 @@ Scene.prototype.draw = function () {
     u_ambientColor: self._ambientColor
   });
   self._objects.forEach(function (object) {
-    var vao = gl.cache.vaos[object.type];
+    var vao = self._getVertexArrayObject(object.type);
     if (vao) {
       sceneProgram.setUniforms({
         u_modelMatrix: object.getModelMatrix(),
@@ -273,33 +283,49 @@ Scene.prototype.draw = function () {
         }
         imageTexture.bind(0);
       } else {
-        self._emptyTexture.bind(0);
-      }
-      if (!vao._color) {
-        gl.vertexAttrib4fv(attributesMap.color.index, object.color);
+        gl.cache.emptyTexture.bind(0);
+        if (!vao._color) {
+          gl.vertexAttrib4fv(attributesMap.color.index, object.color);
+        }
       }
       vao.draw();
     }
   });
 
-  self._outlineEffect.pass();
+  // self._outlineEffect.pass();
 
-  /*gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  outputProgram.use();
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  self._framebuffer.bindTexture(0);
-  gl.cache.quadVao.draw();
-  // self._fxaaEffect.pass(self._framebuffer);*/
-  self._ssaoEffect.pass(self._framebuffer);
+  if (self._enableSSAO) {
+    self._ssaoEffect.pass(self._framebuffer);
+  } else {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    outputProgram.use();
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    self._framebuffer.bindTexture(0);
+    gl.cache.quadVao.draw();
+    // self._fxaaEffect.pass(self._framebuffer);
+  }
 
-  self._glowEffect.pass();
+  // self._glowEffect.pass();
 };
 
 Scene.prototype.add = function (object) {
   var self = this;
   self._objects.push(object);
   self._dirty = true;
+};
+
+Scene.prototype._getVertexArrayObject = function (type) {
+  var self = this,
+    gl = self._gl,
+    geometry = geometries[type],
+    vao = gl.cache.vaos[type];
+  if (geometry && !vao) {
+    vao = gl.cache.vaos[type] = new VertexArrayObject(self, {
+      buffers: geometry
+    });
+  }
+  return vao;
 };
 
 Scene.prototype.getCamera = function () {
@@ -339,5 +365,14 @@ Scene.prototype.getClearColor = function () {
 
 Scene.prototype.setClearColor = function (clearColor) {
   this._clearColor = clearColor;
+  this.redraw();
+};
+
+Scene.prototype.getEnableSSAO = function () {
+  return this._enableSSAO;
+};
+
+Scene.prototype.setEnableSSAO = function (enableSSAO) {
+  this._enableSSAO = enableSSAO;
   this.redraw();
 };

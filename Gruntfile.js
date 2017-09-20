@@ -28,6 +28,7 @@ module.exports = function (grunt) {
       'src/Cube.js',
       'src/Torus.js',
       'src/Sphere.js',
+      'src/ObjParser.js',
     ],
     dest: 'dist/wg.js',
     nonull: true,

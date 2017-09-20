@@ -73,57 +73,6 @@ function addVertexArrayObjectSupport (gl) {
   }
 }
 
-var initWebGL = Util.initWebGL = function (canvas, options, initWebglFunc) {
-  if (typeof canvas === 'string') {
-    canvas = document.getElementById(canvas);
-  }
-
-  setCanvasSize(canvas);
-  var gl = canvas.getContext('webgl', options || {
-    antialias: true
-  });
-  addVertexArrayObjectSupport(gl);
-  gl.cache = {};
-
-  gl.initingTextures = {};
-  // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
-  canvas.addEventListener('webglcontextlost', function (e) {
-    console.log(e);
-    e.preventDefault();
-    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Deal_with_outstanding_asynchronous_requests
-    var imageUrls = Object.keys(gl.initingTextures);
-    imageUrls.forEach(function (imageUrl) {
-      gl.initingTextures[imageUrl].onload = null;
-    });
-    gl.initingTextures = {};
-    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Turn_off_your_rendering_loop_on_lost_context
-    gl.aniamtionId && cancelAnimationFrame(gl.aniamtionId);
-  });
-  canvas.addEventListener('webglcontextrestored', function (e) {
-    console.log(e);
-    init();
-  });
-
-  function init () {
-    gl.cache.quadVao = new VertexArrayObject(gl, {
-      buffers: {
-        position: [
-           1.0,  1.0, 0.0,
-          -1.0,  1.0, 0.0,
-          -1.0, -1.0, 0.0,
-          -1.0, -1.0, 0.0,
-           1.0, -1.0, 0.0,
-           1.0,  1.0, 0.0
-        ]
-      }
-    });
-    initWebglFunc(gl);
-  }
-
-  init();
-  return gl;
-};
-
 var createCube = Util.createCube = function (side) {
   var hs = side * 0.5;
   var pos = [
@@ -158,9 +107,9 @@ var createCube = Util.createCube = function (side) {
     16, 17, 18, 16, 18, 19,
     20, 21, 22, 20, 22, 23
   ];
-  nor.forEach(function (n, i) {
+  /*nor.forEach(function (n, i) {
     nor[i] = -n;
-  });
+  });*/
   return {position : pos, normal : nor, uv : st, index : idx};
 };
 
@@ -244,31 +193,6 @@ var createSphere = Util.createSphere = function (row, column, rad) {
   };
 };
 
-function createVaos(gl) {
-  gl.cache.quadVao = new VertexArrayObject(gl, {
-    buffers: {
-      position: [
-        1.0, 1.0, 0.0,
-        -1.0, 1.0, 0.0,
-        -1.0, -1.0, 0.0,
-        -1.0, -1.0, 0.0,
-        1.0, -1.0, 0.0,
-        1.0, 1.0, 0.0
-      ]
-    }
-  });
-  gl.cache.vaos = {};
-  gl.cache.vaos['cube'] = new VertexArrayObject(gl, {
-    buffers: createCube(1)
-  });
-  gl.cache.vaos['torus'] = new VertexArrayObject(gl, {
-    buffers: createTorus(32, 32, 0.5, 1)
-  });
-  gl.cache.vaos['sphere'] = new VertexArrayObject(gl, {
-    buffers: createSphere(32, 32, 1)
-  });
-}
-
 var equalObject = Util.equalObject = function (a, b) {
   if (a === b) {
     return true;
@@ -284,4 +208,29 @@ var equalObject = Util.equalObject = function (a, b) {
   return !keysA.some(function (key) {
     return a[key] !== b[key];
   });
+};
+
+var geometries = {};
+var addGeometry = Util.addGeometry = function (name, geometry) {
+  geometries[name] = geometry;
+};
+
+addGeometry('cube', createCube(1));
+addGeometry('torus', createTorus(32, 32, 0.5, 1));
+addGeometry('sphere', createSphere(32, 32, 1));
+
+var ajax = Util.ajax = function (url, callback) {
+  var xhr = new XMLHttpRequest();
+  xhr.onreadystatechange = function (e) {
+     if (this.readyState === 4) {
+      if (this.status === 200) {
+        callback(xhr.response);
+      } else {
+        console.log('ajax error:', this.status);
+        callback(null);
+      }
+     }
+  };
+  xhr.open('get', url);
+  xhr.send();
 };
