@@ -67,12 +67,14 @@ Framebuffer.prototype.getHeight = function () {
   return this._height;
 };
 
-Framebuffer.prototype.bind = function () {
+Framebuffer.prototype.bind = function (clear) {
   var self = this,
     gl = self._gl;
   gl.bindFramebuffer(gl.FRAMEBUFFER, self._framebuffer);
-  gl.viewport(0, 0, self._width, self._height);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+  if (clear !== false) {
+    gl.viewport(0, 0, self._width, self._height);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+  }
 };
 
 Framebuffer.prototype.bindTexture = function (unit) {
@@ -95,7 +97,8 @@ Framebuffer.prototype.setSize = function (width, height) {
 };
 
 Framebuffer.prototype.dispose = function () {
-  var self = this;
+  var self = this,
+    gl = self._gl;
   self._texture.dispose();
   self._renderbuffer && gl.deleteRenderbuffer(self._renderbuffer);
   gl.deleteFramebuffer(self._framebuffer);

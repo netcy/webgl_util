@@ -152,9 +152,10 @@ Texture.prototype.bind = function (unit) {
 };
 
 Texture.prototype.dispose = function () {
-  var self = this;
-  self._gl.activeTexture(gl.TEXTURE0 + self._unit);
+  var self = this,
+    gl = self._gl;
+  gl.activeTexture(gl.TEXTURE0 + self._unit);
   gl.bindTexture(gl.TEXTURE_2D, null);
-  self._gl.deleteTexture(self._texture);
+  gl.deleteTexture(self._texture);
   self._texture = null;
 };

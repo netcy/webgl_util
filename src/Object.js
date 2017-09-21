@@ -62,3 +62,9 @@ wg.Object.prototype.getNormalMatrix = function () {
   }
   return self._normalMatrix;
 };
+
+wg.Object.prototype.fromRotationTranslation = function (orientation, position) {
+  var self = this;
+  mat4.fromRotationTranslation(self._modelMatrix, orientation, position);
+  mat3.normalFromMat4(self._normalMatrix, self._modelMatrix);
+};

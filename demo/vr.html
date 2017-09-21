@@ -7,7 +7,11 @@
   <script src="./vr.js"></script>
 </head>
 <body onload="init()" style="margin: 0px;">
-  <canvas id="canvas" width="650" height="487">
+  <div>
+    <button onclick="scene.enterVR()">Enter VR</button>
+    <button onclick="scene.exitVR()">Exit VR</button>
+  </div>
+  <canvas id="canvas" width="1200" height="500">
   </canvas>
 </body>
 </html>

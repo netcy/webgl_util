@@ -1,13 +1,15 @@
-var Camera = wg.Camera = function (canvas, callback) {
-  var self = this;
-  self._callback = callback;
+var Camera = wg.Camera = function (scene) {
+  var self = this,
+    canvas;
+  self._scene = scene;
+  canvas = self._canvas = scene._canvas;
   self._viewMatrix = mat4.create();
   self._projectMatix = mat4.create();
   self._rotateMatrix = mat4.create();
   self._viewDirty = true;
   self._projectDirty = true;
 
-  self._position = vec3.create();
+  self._position = vec3.create(0, 0, 10);
   self._distance = 10;
   self._target = vec3.create();
   self._up = vec3.fromValues(0, 1, 0);
@@ -31,6 +33,9 @@ var Camera = wg.Camera = function (canvas, callback) {
     lastPoint;
 
   function handleMouseDown(e) {
+    if (self._scene._isPresenting) {
+      return;
+    }
     lastPoint = getClientPoint(e);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', clean);
@@ -52,6 +57,9 @@ var Camera = wg.Camera = function (canvas, callback) {
   function handleWheel(e) {
     // TODO chrome bug
     e.preventDefault();
+    if (self._scene._isPresenting) {
+      return;
+    }
     var newDistance = self._distance;
     if (e.deltaY > 0) {
       newDistance *= 1.1;
@@ -68,6 +76,9 @@ var Camera = wg.Camera = function (canvas, callback) {
   }
 
   function handleKeydown (e) {
+    if (self._scene._isPresenting) {
+      return;
+    }
     var keyCode = e.keyCode,
       left = keyCode === 65 /*A*/ || keyCode === 37 /*Left*/,
       right = keyCode === 68 /*D*/ || keyCode === 39 /*Right*/,
@@ -221,11 +232,11 @@ Camera.prototype.setFar = function (far) {
 Camera.prototype.invalidateViewMatrix = function () {
   var self = this;
   self._viewDirty = true;
-  self._callback();
+  self._scene.redraw();
 };
 
 Camera.prototype.invalidateProjectMatrix = function () {
   var self = this;
   self._projectDirty = true;
-  self._callback();
+  self._scene.redraw();
 };

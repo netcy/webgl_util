@@ -123,9 +123,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._canvas = canvas;
   self._dirty = true;
   self._objects = [];
-  self._camera = new Camera(canvas, function () {
-    self.redraw();
-  });
+  self._camera = new Camera(self);
   self._lightColor = [1, 1, 1];
   self._lightPosition = [10, 10, 10];
   self._ambientColor = [.5, .5, .5];
@@ -133,6 +131,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._enableSSAO = false;
 
   var gl = self._gl = canvas.getContext('webgl', options || {
+    preserveDrawingBuffer: true,
     antialias: false,
     stencil: true
   });
@@ -156,7 +155,7 @@ var Scene = wg.Scene = function (canvas, options) {
     });
     gl.initingTextures = {};
     // https://www.khronos.org/webgl/wiki/HandlingContextLost#Turn_off_your_rendering_loop_on_lost_context
-    gl.aniamtionId && cancelAnimationFrame(gl.aniamtionId);
+    self._aniamtionId && (self._vrDisplay || window).cancelAnimationFrame(self._aniamtionId);
   });
   canvas.addEventListener('webglcontextrestored', function (e) {
     console.log(e);
@@ -178,11 +177,11 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    // gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    gl.disable(gl.CULL_FACE);
+    // gl.disable(gl.CULL_FACE);
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
@@ -212,22 +211,102 @@ var Scene = wg.Scene = function (canvas, options) {
     // self._fxaaEffect = new FxaaEffect(self);
     // self._fxaaEffect.setEnabled(true);
 
-    (function render() {
-      gl.aniamtionId = requestAnimationFrame(render);
-      if (self._dirty) {
-        self.draw(gl);
+    var step = vec3.fromValues(0, 0, -0.01),
+      stepTrans = vec3.create(),
+      tranMat = mat4.create(),
+      viewMatrix = mat4.create(),
+      cameraPosition = self._camera._position,
+      leftGamePadPosition = vec3.create(),
+      rightGamePadPosition = vec3.create(),
+      leftGamePad, rightGamePad, orientation;
+    (function render (time) {
+      var vrDisplay = self._vrDisplay,
+        frameData = self._frameData,
+        camera = self._camera,
+        canvas = self._canvas;
+      self._aniamtionId = (vrDisplay || window).requestAnimationFrame(render);
+      if (vrDisplay && vrDisplay.isPresenting) {
+        vrDisplay.getFrameData(frameData);
+        getVRGamepads();
+
+        if (orientation) {
+          vec3.transformQuat(stepTrans, step, orientation);
+          vec3.add(cameraPosition, cameraPosition, stepTrans);
+        }
+        mat4.fromTranslation(tranMat, cameraPosition);
+        mat4.invert(tranMat, tranMat);
+
+        // set gamepad position and rotation
+        if (leftGamePad) {
+          vec3.add(leftGamePadPosition, leftGamePad.pose.position, cameraPosition);
+          leftController.fromRotationTranslation(leftGamePad.pose.orientation, leftGamePadPosition)
+        }
+        if (rightGamePad) {
+          vec3.add(rightGamePadPosition, rightGamePad.pose.position, cameraPosition);
+          rightController.fromRotationTranslation(rightGamePad.pose.orientation, rightGamePadPosition)
+        }
+
+        camera._viewMatrix = frameData.leftViewMatrix;
+        mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
+        camera._projectMatix = frameData.leftProjectionMatrix;
+        self._gl.viewport(0, 0, canvas.width * 0.5, canvas.height);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+        self._dirty = true;
+        self.draw();
+
+        camera._viewMatrix = frameData.rightViewMatrix;
+        mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
+        camera._projectMatix = frameData.rightProjectionMatrix;
+        self._gl.viewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
+        self._dirty = true;
+        self.draw(false);
+        vrDisplay.submitFrame();
+      } else {
+        if (self.onAnimationFrame() !== false) {
+          if (time !== 0 && self._dirty) {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+            self.draw();
+          }
+        }
       }
-    })();
+    })(0);
+
+    function getVRGamepads() {
+      orientation = null;
+      leftGamePad = null;
+      rightGamePad = null;
+      var gamepads = navigator.getGamepads();
+      for (var i=0; i<gamepads.length; i++) {
+        var gamepad = gamepads[i];
+        if (gamepad && gamepad.pose) {
+          if (gamepad.hand === 'right') {
+            rightGamePad = gamepad;
+          } else {
+            leftGamePad = gamepad;
+          }
+          gamepad.buttons.some(function (button) {
+            if (button.pressed) {
+              orientation = gamepad.pose.orientation;
+              return true;
+            }
+          });
+        }
+      }
+    }
   }
 
   init();
+  self._initVR();
+};
+
+Scene.prototype.onAnimationFrame = function () {
 };
 
 Scene.prototype.redraw = function () {
   this._dirty = true;
 };
 
-Scene.prototype.draw = function () {
+Scene.prototype.draw = function (clear) {
   var self = this,
     sceneProgram = self._sceneProgram,
     outputProgram = self._outputProgram,
@@ -236,8 +315,7 @@ Scene.prototype.draw = function () {
     clearColor = self._clearColor;
   self._dirty = false;
   gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
-  self._framebuffer.bind();
-  // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  // self._framebuffer.bind(clear);
   sceneProgram.use();
   sceneProgram.setUniforms({
     u_projectMatrix: camera.getProjectMatrix(),
@@ -294,17 +372,19 @@ Scene.prototype.draw = function () {
 
   // self._outlineEffect.pass();
 
-  if (self._enableSSAO) {
+  /*if (self._enableSSAO) {
     self._ssaoEffect.pass(self._framebuffer);
   } else {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     outputProgram.use();
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if (clear !== false) {
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    }
     self._framebuffer.bindTexture(0);
     gl.cache.quadVao.draw();
     // self._fxaaEffect.pass(self._framebuffer);
-  }
+  }*/
 
   // self._glowEffect.pass();
 };
@@ -326,6 +406,102 @@ Scene.prototype._getVertexArrayObject = function (type) {
     });
   }
   return vao;
+};
+
+Scene.prototype._initVR = function () {
+  var self = this,
+    canvas = self._canvas,
+    vrDisplay;
+  if (self._vrDisplay) {
+    return;
+  }
+  if (navigator.getVRDisplays) {
+    navigator.getVRDisplays().then(function (vrDisplays) {
+      if (vrDisplays && vrDisplays.length) {
+        vrDisplay = self._vrDisplay = vrDisplays[0];
+        self._frameData = new VRFrameData();
+        vrDisplay.depthNear = self._camera._near;
+        vrDisplay.depthFar = self._camera._far;
+
+        if (!self.onVRRequestPresent) {
+          self.onVRRequestPresent = function (e) {
+            console.log('onVRRequestPresent', e);
+            self.enterVR();
+          };
+        }
+
+        if (!self.onVRExitPresent) {
+          self.onVRExitPresent = function (e) {
+            console.log('onVRExitPresent', e);
+            self.exitVR();
+          };
+        }
+
+        if (!self.onVRPresentChange) {
+          self.onVRPresentChange = function (e) {
+            // TODO resize Framebuffer
+            if (vrDisplay.isPresenting) {
+              self._isPresenting = true;
+              var leftEye = vrDisplay.getEyeParameters('left');
+              var rightEye = vrDisplay.getEyeParameters('right');
+              self._oldSize = {
+                width: canvas.width / window.devicePixelRatio,
+                height: canvas.height / window.devicePixelRatio
+              };
+              canvas.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
+              canvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
+            } else {
+              self._isPresenting = false;
+              canvas.width = self._oldSize.width;
+              canvas.height = self._oldSize.height;
+            }
+            self._framebuffer.setSize(canvas.width, canvas.height);
+          };
+        }
+        window.addEventListener('vrdisplaypresentchange', self.onVRPresentChange, false);
+        window.addEventListener('vrdisplayactivate', self.onVRRequestPresent, false);
+        window.addEventListener('vrdisplaydeactivate', self.onVRExitPresent, false);
+      } else {
+        self._vrFailReason = 'Your browser does support WebVR, but no VR device connected';
+      }
+    });
+  } else {
+    self._vrFailReason = 'Your browser does not support WebVR, check http://webvr.info';
+  }
+};
+
+Scene.prototype.enterVR = function () {
+  var self = this,
+    canvas = self._canvas,
+    vrDisplay = self._vrDisplay;
+  if (vrDisplay && !vrDisplay.isPresenting) {
+    vrDisplay.requestPresent([{ source: canvas }]).then(function () {
+    }, function (e) {
+      console.log('requestPresent failed.', e);
+    });
+  }
+  if (!vrDisplay && self._vrFailReason) {
+    alert(self._vrFailReason);
+  }
+};
+
+Scene.prototype.exitVR = function () {
+  var self = this,
+    vrDisplay = self._vrDisplay;
+  if (vrDisplay && vrDisplay.isPresenting) {
+    vrDisplay.exitPresent().then(function () {
+    }, function (e) {
+      console.log('exitPresent failed.', e);
+    });
+  }
+};
+
+Scene.prototype.resetPose = function () {
+  var self = this,
+    vrDisplay = self._vrDisplay;
+  if (vrDisplay) {
+    vrDisplay.resetPose();
+  }
 };
 
 Scene.prototype.getCamera = function () {
