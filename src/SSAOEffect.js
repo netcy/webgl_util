@@ -239,6 +239,18 @@ var SSAOEffect = wg.SSAOEffect = function (scene) {
   });
 };
 
+SSAOEffect.prototype.setSize = function (width, height) {
+  var self = this;
+  if (self._width === width && self._height === height) {
+    return;
+  }
+  self._width = width;
+  self._height = height;
+  self._deferPositionFramebuffer.setSize(width, height);
+  self._deferNormalFramebuffer.setSize(width, height);
+  self._ssaoFramebuffer.setSize(width, height);
+};
+
 SSAOEffect.prototype._draw = function (program) {
   var self = this,
     gl = self._gl;

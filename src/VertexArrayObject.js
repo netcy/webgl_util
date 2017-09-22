@@ -73,33 +73,36 @@ var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
   self._buffers = options.buffers;
 };
 
-VertexArrayObject.prototype.draw = function () {
+VertexArrayObject.prototype.draw = function (withMaterial) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
   if (self._index) {
     if (self._buffers.parts) {
       self._buffers.parts.forEach(function (part) {
-        self._scene._sceneProgram.setUniforms({
-          u_texture: !!part.image
-        });
-        if (part.image) {
-          var image = part.image;
-          if (!image.url) {
-            image = part.image = {
-              url: image
-            };
+        if (withMaterial) {
+          self._scene._sceneProgram.setUniforms({
+            u_texture: !!part.image
+          });
+          // TODO move to globle cache
+          if (part.image) {
+            var image = part.image;
+            if (!image.url) {
+              image = part.image = {
+                url: image
+              };
+            }
+            var imageTexture = image.texture;
+            if (!imageTexture) {
+              image.callback = function () {
+                self._scene.redraw();
+              };
+              imageTexture = image.texture = new Texture(gl, image);
+            }
+            imageTexture.bind(0);
+          } else {
+            gl.vertexAttrib4fv(attributesMap.color.index, part.color);
           }
-          var imageTexture = image.texture;
-          if (!imageTexture) {
-            image.callback = function () {
-              self._scene.redraw();
-            };
-            imageTexture = image.texture = new Texture(gl, image);
-          }
-          imageTexture.bind(0);
-        } else {
-          gl.vertexAttrib4fv(attributesMap.color.index, part.color);
         }
         part.counts.forEach(function (item) {
           gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);

@@ -14,15 +14,14 @@ uniform mat4 u_modelMatrix;
 uniform mat3 u_normalMatrix;
 uniform vec2 u_textureScale;
 
-// uniform vec3 u_lightPosition;
-// uniform vec3 u_eyePosition;
+uniform vec3 u_lightPosition;
+uniform vec3 u_eyePosition;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
 varying vec4 v_color;
-// varying vec3 v_lightDirection;
-// varying vec3 v_eyeDirection;
-varying vec3 v_worldPosition;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
   gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
@@ -30,10 +29,9 @@ void main () {
   v_uv = a_uv * u_textureScale;
   v_color = a_color;
 
-  // vec3 worldPosition = (u_modelMatrix * a_position).xyz;
-  // v_lightDirection = u_lightPosition - worldPosition;
-  // v_eyeDirection = u_eyePosition - worldPosition;
-  v_worldPosition = (u_modelMatrix * a_position).xyz;
+  vec3 worldPosition = (u_modelMatrix * a_position).xyz;
+  v_lightDirection = u_lightPosition - worldPosition;
+  v_eyeDirection = u_eyePosition - worldPosition;
 }
 `;
 
@@ -47,28 +45,17 @@ uniform vec3 u_ambientColor;
 uniform bool u_texture;
 uniform sampler2D u_sampler;
 
-uniform vec3 u_lightPosition;
-uniform vec3 u_eyePosition;
-
 varying vec3 v_normal;
 varying vec2 v_uv;
 varying vec4 v_color;
-// varying vec3 v_lightDirection;
-// varying vec3 v_eyeDirection;
-varying vec3 v_worldPosition;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
-  // v_lightDirection = u_lightPosition - worldPosition;
-  // v_eyeDirection = u_eyePosition - worldPosition;
   vec3 normal = normalize(v_normal);
-  // vec3 lightDirection = normalize(v_lightDirection);
-  // vec3 eyeDirection = normalize(v_eyeDirection);
-  vec3 lightDirection = normalize(u_lightPosition - v_worldPosition);
-  vec3 eyeDirection = normalize(u_eyePosition - v_worldPosition);
+  vec3 lightDirection = normalize(v_lightDirection);
+  vec3 eyeDirection = normalize(v_eyeDirection);
   float diffuse = max(dot(lightDirection, normal), 0.0);
-
-  // vec3 halfDirection = normalize(lightDirection + eyeDirection);
-  // float specular = pow(max(dot(halfDirection, normal), 0.0), 24.0);
 
   vec3 reflectDirection = reflect(-lightDirection, normal);
   float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
@@ -129,6 +116,8 @@ var Scene = wg.Scene = function (canvas, options) {
   self._ambientColor = [.5, .5, .5];
   self._clearColor = [0, 0, 0, 0];
   self._enableSSAO = false;
+  self._clear = true;
+  self._viewport = {x: 0, y: 0, width: 0, height: 0};
 
   var gl = self._gl = canvas.getContext('webgl', options || {
     preserveDrawingBuffer: true,
@@ -185,7 +174,8 @@ var Scene = wg.Scene = function (canvas, options) {
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
-      height: 1
+      height: 1,
+      data: new Uint8Array([255, 255, 255, 255])
     });
     self._sceneProgram = new Program(gl, {
       vertex: VERTEX_SHADER_SCENE,
@@ -208,6 +198,7 @@ var Scene = wg.Scene = function (canvas, options) {
     self._outlineEffect = new OutlineEffect(self);
     self._glowEffect = new GlowEffect(self);
     self._ssaoEffect = new SSAOEffect(self);
+
     // self._fxaaEffect = new FxaaEffect(self);
     // self._fxaaEffect.setEnabled(true);
 
@@ -216,55 +207,49 @@ var Scene = wg.Scene = function (canvas, options) {
       tranMat = mat4.create(),
       viewMatrix = mat4.create(),
       cameraPosition = self._camera._position,
-      leftGamePadPosition = vec3.create(),
-      rightGamePadPosition = vec3.create(),
-      leftGamePad, rightGamePad, orientation;
+      leftGamePad, rightGamePad, pressedGamePad;
     (function render (time) {
       var vrDisplay = self._vrDisplay,
         frameData = self._frameData,
         camera = self._camera,
-        canvas = self._canvas;
+        canvas = self._canvas,
+        clearColor = self._clearColor;
       self._aniamtionId = (vrDisplay || window).requestAnimationFrame(render);
+      gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
       if (vrDisplay && vrDisplay.isPresenting) {
         vrDisplay.getFrameData(frameData);
         getVRGamepads();
-
-        if (orientation) {
-          vec3.transformQuat(stepTrans, step, orientation);
+        if (pressedGamePad) {
+          vec3.transformQuat(stepTrans, step, pressedGamePad.pose.orientation);
           vec3.add(cameraPosition, cameraPosition, stepTrans);
         }
+        self.onGamepadRender(leftGamePad, rightGamePad, pressedGamePad);
+
         mat4.fromTranslation(tranMat, cameraPosition);
         mat4.invert(tranMat, tranMat);
-
-        // set gamepad position and rotation
-        if (leftGamePad) {
-          vec3.add(leftGamePadPosition, leftGamePad.pose.position, cameraPosition);
-          leftController.fromRotationTranslation(leftGamePad.pose.orientation, leftGamePadPosition)
-        }
-        if (rightGamePad) {
-          vec3.add(rightGamePadPosition, rightGamePad.pose.position, cameraPosition);
-          rightController.fromRotationTranslation(rightGamePad.pose.orientation, rightGamePadPosition)
-        }
 
         camera._viewMatrix = frameData.leftViewMatrix;
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
         camera._projectMatix = frameData.leftProjectionMatrix;
-        self._gl.viewport(0, 0, canvas.width * 0.5, canvas.height);
+        self._setViewport(0, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        self._dirty = true;
+        self._clear = true;
         self.draw();
 
         camera._viewMatrix = frameData.rightViewMatrix;
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
         camera._projectMatix = frameData.rightProjectionMatrix;
-        self._gl.viewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
+        self._setViewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
         self._dirty = true;
-        self.draw(false);
+        self._clear = false;
+        self.draw();
         vrDisplay.submitFrame();
       } else {
         if (self.onAnimationFrame() !== false) {
           if (time !== 0 && self._dirty) {
+            self._setViewport(0, 0, canvas.width, canvas.height);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+            self._clear = true;
             self.draw();
           }
         }
@@ -272,9 +257,9 @@ var Scene = wg.Scene = function (canvas, options) {
     })(0);
 
     function getVRGamepads() {
-      orientation = null;
       leftGamePad = null;
       rightGamePad = null;
+      pressedGamePad = null;
       var gamepads = navigator.getGamepads();
       for (var i=0; i<gamepads.length; i++) {
         var gamepad = gamepads[i];
@@ -286,7 +271,7 @@ var Scene = wg.Scene = function (canvas, options) {
           }
           gamepad.buttons.some(function (button) {
             if (button.pressed) {
-              orientation = gamepad.pose.orientation;
+              pressedGamePad = gamepad;
               return true;
             }
           });
@@ -299,6 +284,9 @@ var Scene = wg.Scene = function (canvas, options) {
   self._initVR();
 };
 
+Scene.prototype.onGamepadRender = function () {
+};
+
 Scene.prototype.onAnimationFrame = function () {
 };
 
@@ -306,16 +294,24 @@ Scene.prototype.redraw = function () {
   this._dirty = true;
 };
 
-Scene.prototype.draw = function (clear) {
+Scene.prototype._setViewport = function (x, y, width, height) {
+  var self = this,
+    viewport = self._viewport;
+  viewport.x = x;
+  viewport.y = y;
+  viewport.width = width;
+  viewport.height = height;
+  self._gl.viewport(x, y, width, height);
+};
+
+Scene.prototype.draw = function () {
   var self = this,
     sceneProgram = self._sceneProgram,
     outputProgram = self._outputProgram,
     camera = self._camera,
-    gl = self._gl,
-    clearColor = self._clearColor;
+    gl = self._gl;
   self._dirty = false;
-  gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
-  // self._framebuffer.bind(clear);
+  // self._framebuffer.bind();
   sceneProgram.use();
   sceneProgram.setUniforms({
     u_projectMatrix: camera.getProjectMatrix(),
@@ -326,6 +322,9 @@ Scene.prototype.draw = function (clear) {
     u_ambientColor: self._ambientColor
   });
   self._objects.forEach(function (object) {
+    if (object.visible === false) {
+      return;
+    }
     var vao = self._getVertexArrayObject(object.type);
     if (vao) {
       sceneProgram.setUniforms({
@@ -366,11 +365,11 @@ Scene.prototype.draw = function (clear) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
       }
-      vao.draw();
+      vao.draw(true);
     }
   });
 
-  // self._outlineEffect.pass();
+  self._outlineEffect.pass();
 
   /*if (self._enableSSAO) {
     self._ssaoEffect.pass(self._framebuffer);
@@ -386,7 +385,7 @@ Scene.prototype.draw = function (clear) {
     // self._fxaaEffect.pass(self._framebuffer);
   }*/
 
-  // self._glowEffect.pass();
+  self._glowEffect.pass();
 };
 
 Scene.prototype.add = function (object) {
@@ -395,10 +394,16 @@ Scene.prototype.add = function (object) {
   self._dirty = true;
 };
 
+Scene.prototype.clear = function () {
+  var self = this;
+  self._objects = [];
+  self._dirty = true;
+};
+
 Scene.prototype._getVertexArrayObject = function (type) {
   var self = this,
     gl = self._gl,
-    geometry = geometries[type],
+    geometry = wg.geometries[type],
     vao = gl.cache.vaos[type];
   if (geometry && !vao) {
     vao = gl.cache.vaos[type] = new VertexArrayObject(self, {

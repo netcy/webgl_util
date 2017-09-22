@@ -176,7 +176,8 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   var self = this,
     gl = self._gl,
     quadVao = gl.cache.quadVao,
-    scene = self._scene;
+    scene = self._scene,
+    viewport = scene._viewport;
 
   gl.clearColor(0, 0, 0, 0);
   self._colorFramebuffer.bind();
@@ -231,7 +232,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   quadVao.draw();
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
 
   gl.clear(gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
   self._colorProgram.use();
@@ -263,6 +264,9 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
     gl.colorMask(false, false, false, false);
 
     scene._objects.forEach(function (object) {
+      if (object.visible === false) {
+        return;
+      }
       if (!object.glow) {
         var vao = gl.cache.vaos[object.type];
         if (vao) {
@@ -289,6 +293,9 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
     }
 
     scene._objects.forEach(function (object) {
+      if (object.visible === false) {
+        return;
+      }
       if (object.glow) {
         var vao = gl.cache.vaos[object.type];
         if (vao) {

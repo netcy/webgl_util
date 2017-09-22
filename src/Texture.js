@@ -16,6 +16,7 @@
  *     anisotropy: default 16
  *     dataType: default 'UNSIGNED_BYTE'
  *     format: default 'RGBA'
+ *     data: default undefinded
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
@@ -99,7 +100,7 @@ Texture.prototype.bind = function (unit) {
         0,
         gl[options.format || 'RGBA'],
         gl[options.dataType || 'UNSIGNED_BYTE'],
-        null
+        options.data
       );
     } else {
       if (!self._imageLoaded) {

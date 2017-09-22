@@ -11,6 +11,7 @@ module.exports = function (grunt) {
   grunt.config('concat.all', {
     src: [
       'src/Util.js',
+      'src/Geometries.js',
       'src/Program.js',
       'src/Framebuffer.js',
       'src/Texture.js',

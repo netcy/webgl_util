@@ -76,6 +76,45 @@ function addVertexArrayObjectSupport (gl) {
   }
 }
 
+var equalObject = Util.equalObject = function (a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  var keysA = Object.keys(a),
+    keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) {
+    return false;
+  }
+  return !keysA.some(function (key) {
+    return a[key] !== b[key];
+  });
+};
+
+var ajax = Util.ajax = function (url, callback) {
+  var xhr = new XMLHttpRequest();
+  xhr.onreadystatechange = function (e) {
+     if (this.readyState === 4) {
+      if (this.status === 200) {
+        callback(xhr.response);
+      } else {
+        console.log('ajax error:', this.status);
+        callback(null);
+      }
+     }
+  };
+  xhr.open('get', url);
+  xhr.send();
+};
+
+// Source: src/Geometries.js
+wg.geometries = {};
+var addGeometry = Util.addGeometry = function (name, geometry) {
+  wg.geometries[name] = geometry;
+};
+
 var createCube = Util.createCube = function (side) {
   var hs = side * 0.5;
   var pos = [
@@ -110,9 +149,6 @@ var createCube = Util.createCube = function (side) {
     16, 17, 18, 16, 18, 19,
     20, 21, 22, 20, 22, 23
   ];
-  /*nor.forEach(function (n, i) {
-    nor[i] = -n;
-  });*/
   return {position : pos, normal : nor, uv : st, index : idx};
 };
 
@@ -196,47 +232,99 @@ var createSphere = Util.createSphere = function (row, column, rad) {
   };
 };
 
-var equalObject = Util.equalObject = function (a, b) {
-  if (a === b) {
-    return true;
+function createTruncatedCone(
+    bottomRadius,
+    topRadius,
+    height,
+    radialSubdivisions,
+    verticalSubdivisions,
+    opt_topCap,
+    opt_bottomCap) {
+  if (radialSubdivisions < 3) {
+    throw Error('radialSubdivisions must be 3 or greater');
   }
-  if (a == null || b == null) {
-    return false;
-  }
-  var keysA = Object.keys(a),
-    keysB = Object.keys(b);
-  if (keysA.length !== keysB.length) {
-    return false;
-  }
-  return !keysA.some(function (key) {
-    return a[key] !== b[key];
-  });
-};
 
-var geometries = {};
-var addGeometry = Util.addGeometry = function (name, geometry) {
-  geometries[name] = geometry;
-};
+  if (verticalSubdivisions < 1) {
+    throw Error('verticalSubdivisions must be 1 or greater');
+  }
+
+  var topCap = (opt_topCap === undefined) ? true : opt_topCap;
+  var bottomCap = (opt_bottomCap === undefined) ? true : opt_bottomCap;
+
+  var extra = (topCap ? 2 : 0) + (bottomCap ? 2 : 0);
+
+  var numVertices = (radialSubdivisions + 1) * (verticalSubdivisions + 1 + extra);
+  var positions = [];
+  var normals   = [];
+  var texCoords = [];
+  var indices   = [];
+
+  var vertsAroundEdge = radialSubdivisions + 1;
+
+  // The slant of the cone is constant across its surface
+  var slant = Math.atan2(bottomRadius - topRadius, height);
+  var cosSlant = Math.cos(slant);
+  var sinSlant = Math.sin(slant);
+
+  var start = topCap ? -2 : 0;
+  var end = verticalSubdivisions + (bottomCap ? 2 : 0);
+
+  for (var yy = start; yy <= end; ++yy) {
+    var v = yy / verticalSubdivisions;
+    var y = height * v;
+    var ringRadius;
+    if (yy < 0) {
+      y = 0;
+      v = 1;
+      ringRadius = bottomRadius;
+    } else if (yy > verticalSubdivisions) {
+      y = height;
+      v = 1;
+      ringRadius = topRadius;
+    } else {
+      ringRadius = bottomRadius +
+        (topRadius - bottomRadius) * (yy / verticalSubdivisions);
+    }
+    if (yy === -2 || yy === verticalSubdivisions + 2) {
+      ringRadius = 0;
+      v = 0;
+    }
+    y -= height / 2;
+    for (var ii = 0; ii < vertsAroundEdge; ++ii) {
+      var sin = Math.sin(ii * Math.PI * 2 / radialSubdivisions);
+      var cos = Math.cos(ii * Math.PI * 2 / radialSubdivisions);
+      positions.push(sin * ringRadius, y, cos * ringRadius);
+      normals.push(
+          (yy < 0 || yy > verticalSubdivisions) ? 0 : (sin * cosSlant),
+          (yy < 0) ? -1 : (yy > verticalSubdivisions ? 1 : sinSlant),
+          (yy < 0 || yy > verticalSubdivisions) ? 0 : (cos * cosSlant));
+      texCoords.push((ii / radialSubdivisions), 1 - v);
+    }
+  }
+
+  for (yy = 0; yy < verticalSubdivisions + extra; ++yy) {
+    for (ii = 0; ii < radialSubdivisions; ++ii) {
+      indices.push(vertsAroundEdge * (yy + 0) + 0 + ii,
+                   vertsAroundEdge * (yy + 0) + 1 + ii,
+                   vertsAroundEdge * (yy + 1) + 1 + ii);
+      indices.push(vertsAroundEdge * (yy + 0) + 0 + ii,
+                   vertsAroundEdge * (yy + 1) + 1 + ii,
+                   vertsAroundEdge * (yy + 1) + 0 + ii);
+    }
+  }
+
+  return {
+    position: positions,
+    normal: normals,
+    uv: texCoords,
+    index: indices,
+  };
+}
 
 addGeometry('cube', createCube(1));
 addGeometry('torus', createTorus(32, 32, 0.5, 1));
 addGeometry('sphere', createSphere(32, 32, 1));
-
-var ajax = Util.ajax = function (url, callback) {
-  var xhr = new XMLHttpRequest();
-  xhr.onreadystatechange = function (e) {
-     if (this.readyState === 4) {
-      if (this.status === 200) {
-        callback(xhr.response);
-      } else {
-        console.log('ajax error:', this.status);
-        callback(null);
-      }
-     }
-  };
-  xhr.open('get', url);
-  xhr.send();
-};
+addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
 
 // Source: src/Program.js
 var attributesMap = {
@@ -477,14 +565,12 @@ Framebuffer.prototype.getHeight = function () {
   return this._height;
 };
 
-Framebuffer.prototype.bind = function (clear) {
+Framebuffer.prototype.bind = function () {
   var self = this,
     gl = self._gl;
   gl.bindFramebuffer(gl.FRAMEBUFFER, self._framebuffer);
-  if (clear !== false) {
-    gl.viewport(0, 0, self._width, self._height);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-  }
+  gl.viewport(0, 0, self._width, self._height);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 };
 
 Framebuffer.prototype.bindTexture = function (unit) {
@@ -533,6 +619,7 @@ Framebuffer.prototype.dispose = function () {
  *     anisotropy: default 16
  *     dataType: default 'UNSIGNED_BYTE'
  *     format: default 'RGBA'
+ *     data: default undefinded
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
@@ -616,7 +703,7 @@ Texture.prototype.bind = function (unit) {
         0,
         gl[options.format || 'RGBA'],
         gl[options.dataType || 'UNSIGNED_BYTE'],
-        null
+        options.data
       );
     } else {
       if (!self._imageLoaded) {
@@ -753,33 +840,36 @@ var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
   self._buffers = options.buffers;
 };
 
-VertexArrayObject.prototype.draw = function () {
+VertexArrayObject.prototype.draw = function (withMaterial) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
   if (self._index) {
     if (self._buffers.parts) {
       self._buffers.parts.forEach(function (part) {
-        self._scene._sceneProgram.setUniforms({
-          u_texture: !!part.image
-        });
-        if (part.image) {
-          var image = part.image;
-          if (!image.url) {
-            image = part.image = {
-              url: image
-            };
+        if (withMaterial) {
+          self._scene._sceneProgram.setUniforms({
+            u_texture: !!part.image
+          });
+          // TODO move to globle cache
+          if (part.image) {
+            var image = part.image;
+            if (!image.url) {
+              image = part.image = {
+                url: image
+              };
+            }
+            var imageTexture = image.texture;
+            if (!imageTexture) {
+              image.callback = function () {
+                self._scene.redraw();
+              };
+              imageTexture = image.texture = new Texture(gl, image);
+            }
+            imageTexture.bind(0);
+          } else {
+            gl.vertexAttrib4fv(attributesMap.color.index, part.color);
           }
-          var imageTexture = image.texture;
-          if (!imageTexture) {
-            image.callback = function () {
-              self._scene.redraw();
-            };
-            imageTexture = image.texture = new Texture(gl, image);
-          }
-          imageTexture.bind(0);
-        } else {
-          gl.vertexAttrib4fv(attributesMap.color.index, part.color);
         }
         part.counts.forEach(function (item) {
           gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
@@ -1675,7 +1765,8 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   var self = this,
     gl = self._gl,
     quadVao = gl.cache.quadVao,
-    scene = self._scene;
+    scene = self._scene,
+    viewport = scene._viewport;
 
   gl.clearColor(0, 0, 0, 0);
   self._colorFramebuffer.bind();
@@ -1730,7 +1821,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   quadVao.draw();
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
 
   gl.clear(gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
   self._colorProgram.use();
@@ -1762,6 +1853,9 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
     gl.colorMask(false, false, false, false);
 
     scene._objects.forEach(function (object) {
+      if (object.visible === false) {
+        return;
+      }
       if (!object.glow) {
         var vao = gl.cache.vaos[object.type];
         if (vao) {
@@ -1788,6 +1882,9 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
     }
 
     scene._objects.forEach(function (object) {
+      if (object.visible === false) {
+        return;
+      }
       if (object.glow) {
         var vao = gl.cache.vaos[object.type];
         if (vao) {
@@ -2053,6 +2150,18 @@ var SSAOEffect = wg.SSAOEffect = function (scene) {
     },
     flipY: false
   });
+};
+
+SSAOEffect.prototype.setSize = function (width, height) {
+  var self = this;
+  if (self._width === width && self._height === height) {
+    return;
+  }
+  self._width = width;
+  self._height = height;
+  self._deferPositionFramebuffer.setSize(width, height);
+  self._deferNormalFramebuffer.setSize(width, height);
+  self._ssaoFramebuffer.setSize(width, height);
 };
 
 SSAOEffect.prototype._draw = function (program) {
@@ -2445,15 +2554,14 @@ uniform mat4 u_modelMatrix;
 uniform mat3 u_normalMatrix;
 uniform vec2 u_textureScale;
 
-// uniform vec3 u_lightPosition;
-// uniform vec3 u_eyePosition;
+uniform vec3 u_lightPosition;
+uniform vec3 u_eyePosition;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
 varying vec4 v_color;
-// varying vec3 v_lightDirection;
-// varying vec3 v_eyeDirection;
-varying vec3 v_worldPosition;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
   gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
@@ -2461,10 +2569,9 @@ void main () {
   v_uv = a_uv * u_textureScale;
   v_color = a_color;
 
-  // vec3 worldPosition = (u_modelMatrix * a_position).xyz;
-  // v_lightDirection = u_lightPosition - worldPosition;
-  // v_eyeDirection = u_eyePosition - worldPosition;
-  v_worldPosition = (u_modelMatrix * a_position).xyz;
+  vec3 worldPosition = (u_modelMatrix * a_position).xyz;
+  v_lightDirection = u_lightPosition - worldPosition;
+  v_eyeDirection = u_eyePosition - worldPosition;
 }
 `;
 
@@ -2478,28 +2585,17 @@ uniform vec3 u_ambientColor;
 uniform bool u_texture;
 uniform sampler2D u_sampler;
 
-uniform vec3 u_lightPosition;
-uniform vec3 u_eyePosition;
-
 varying vec3 v_normal;
 varying vec2 v_uv;
 varying vec4 v_color;
-// varying vec3 v_lightDirection;
-// varying vec3 v_eyeDirection;
-varying vec3 v_worldPosition;
+varying vec3 v_lightDirection;
+varying vec3 v_eyeDirection;
 
 void main () {
-  // v_lightDirection = u_lightPosition - worldPosition;
-  // v_eyeDirection = u_eyePosition - worldPosition;
   vec3 normal = normalize(v_normal);
-  // vec3 lightDirection = normalize(v_lightDirection);
-  // vec3 eyeDirection = normalize(v_eyeDirection);
-  vec3 lightDirection = normalize(u_lightPosition - v_worldPosition);
-  vec3 eyeDirection = normalize(u_eyePosition - v_worldPosition);
+  vec3 lightDirection = normalize(v_lightDirection);
+  vec3 eyeDirection = normalize(v_eyeDirection);
   float diffuse = max(dot(lightDirection, normal), 0.0);
-
-  // vec3 halfDirection = normalize(lightDirection + eyeDirection);
-  // float specular = pow(max(dot(halfDirection, normal), 0.0), 24.0);
 
   vec3 reflectDirection = reflect(-lightDirection, normal);
   float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
@@ -2560,6 +2656,8 @@ var Scene = wg.Scene = function (canvas, options) {
   self._ambientColor = [.5, .5, .5];
   self._clearColor = [0, 0, 0, 0];
   self._enableSSAO = false;
+  self._clear = true;
+  self._viewport = {x: 0, y: 0, width: 0, height: 0};
 
   var gl = self._gl = canvas.getContext('webgl', options || {
     preserveDrawingBuffer: true,
@@ -2616,7 +2714,8 @@ var Scene = wg.Scene = function (canvas, options) {
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
-      height: 1
+      height: 1,
+      data: new Uint8Array([255, 255, 255, 255])
     });
     self._sceneProgram = new Program(gl, {
       vertex: VERTEX_SHADER_SCENE,
@@ -2639,69 +2738,58 @@ var Scene = wg.Scene = function (canvas, options) {
     self._outlineEffect = new OutlineEffect(self);
     self._glowEffect = new GlowEffect(self);
     self._ssaoEffect = new SSAOEffect(self);
+
     // self._fxaaEffect = new FxaaEffect(self);
     // self._fxaaEffect.setEnabled(true);
 
-    /*(function render() {
-      gl.aniamtionId = requestAnimationFrame(render);
-      if (self._dirty) {
-        self.draw(gl);
-      }
-    })();*/
     var step = vec3.fromValues(0, 0, -0.01),
       stepTrans = vec3.create(),
       tranMat = mat4.create(),
       viewMatrix = mat4.create(),
       cameraPosition = self._camera._position,
-      leftGamePadPosition = vec3.create(),
-      rightGamePadPosition = vec3.create(),
-      leftGamePad, rightGamePad, orientation;
+      leftGamePad, rightGamePad, pressedGamePad;
     (function render (time) {
       var vrDisplay = self._vrDisplay,
         frameData = self._frameData,
         camera = self._camera,
-        canvas = self._canvas;
+        canvas = self._canvas,
+        clearColor = self._clearColor;
       self._aniamtionId = (vrDisplay || window).requestAnimationFrame(render);
+      gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
       if (vrDisplay && vrDisplay.isPresenting) {
         vrDisplay.getFrameData(frameData);
         getVRGamepads();
-
-        if (orientation) {
-          vec3.transformQuat(stepTrans, step, orientation);
+        if (pressedGamePad) {
+          vec3.transformQuat(stepTrans, step, pressedGamePad.pose.orientation);
           vec3.add(cameraPosition, cameraPosition, stepTrans);
         }
+        self.onGamepadRender(leftGamePad, rightGamePad, pressedGamePad);
+
         mat4.fromTranslation(tranMat, cameraPosition);
         mat4.invert(tranMat, tranMat);
-
-        // set gamepad position and rotation
-        if (leftGamePad) {
-          vec3.add(leftGamePadPosition, leftGamePad.pose.position, cameraPosition);
-          leftController.fromRotationTranslation(leftGamePad.pose.orientation, leftGamePadPosition)
-        }
-        if (rightGamePad) {
-          vec3.add(rightGamePadPosition, rightGamePad.pose.position, cameraPosition);
-          rightController.fromRotationTranslation(rightGamePad.pose.orientation, rightGamePadPosition)
-        }
 
         camera._viewMatrix = frameData.leftViewMatrix;
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
         camera._projectMatix = frameData.leftProjectionMatrix;
-        self._gl.viewport(0, 0, canvas.width * 0.5, canvas.height);
+        self._setViewport(0, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        self._dirty = true;
+        self._clear = true;
         self.draw();
 
         camera._viewMatrix = frameData.rightViewMatrix;
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
         camera._projectMatix = frameData.rightProjectionMatrix;
-        self._gl.viewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
+        self._setViewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
         self._dirty = true;
-        self.draw(false);
+        self._clear = false;
+        self.draw();
         vrDisplay.submitFrame();
       } else {
         if (self.onAnimationFrame() !== false) {
           if (time !== 0 && self._dirty) {
+            self._setViewport(0, 0, canvas.width, canvas.height);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+            self._clear = true;
             self.draw();
           }
         }
@@ -2709,9 +2797,9 @@ var Scene = wg.Scene = function (canvas, options) {
     })(0);
 
     function getVRGamepads() {
-      orientation = null;
       leftGamePad = null;
       rightGamePad = null;
+      pressedGamePad = null;
       var gamepads = navigator.getGamepads();
       for (var i=0; i<gamepads.length; i++) {
         var gamepad = gamepads[i];
@@ -2723,7 +2811,7 @@ var Scene = wg.Scene = function (canvas, options) {
           }
           gamepad.buttons.some(function (button) {
             if (button.pressed) {
-              orientation = gamepad.pose.orientation;
+              pressedGamePad = gamepad;
               return true;
             }
           });
@@ -2736,6 +2824,9 @@ var Scene = wg.Scene = function (canvas, options) {
   self._initVR();
 };
 
+Scene.prototype.onGamepadRender = function () {
+};
+
 Scene.prototype.onAnimationFrame = function () {
 };
 
@@ -2743,16 +2834,24 @@ Scene.prototype.redraw = function () {
   this._dirty = true;
 };
 
-Scene.prototype.draw = function (clear) {
+Scene.prototype._setViewport = function (x, y, width, height) {
+  var self = this,
+    viewport = self._viewport;
+  viewport.x = x;
+  viewport.y = y;
+  viewport.width = width;
+  viewport.height = height;
+  self._gl.viewport(x, y, width, height);
+};
+
+Scene.prototype.draw = function () {
   var self = this,
     sceneProgram = self._sceneProgram,
     outputProgram = self._outputProgram,
     camera = self._camera,
-    gl = self._gl,
-    clearColor = self._clearColor;
+    gl = self._gl;
   self._dirty = false;
-  gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
-  // self._framebuffer.bind(clear);
+  // self._framebuffer.bind();
   sceneProgram.use();
   sceneProgram.setUniforms({
     u_projectMatrix: camera.getProjectMatrix(),
@@ -2763,6 +2862,9 @@ Scene.prototype.draw = function (clear) {
     u_ambientColor: self._ambientColor
   });
   self._objects.forEach(function (object) {
+    if (object.visible === false) {
+      return;
+    }
     var vao = self._getVertexArrayObject(object.type);
     if (vao) {
       sceneProgram.setUniforms({
@@ -2803,11 +2905,11 @@ Scene.prototype.draw = function (clear) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
       }
-      vao.draw();
+      vao.draw(true);
     }
   });
 
-  // self._outlineEffect.pass();
+  self._outlineEffect.pass();
 
   /*if (self._enableSSAO) {
     self._ssaoEffect.pass(self._framebuffer);
@@ -2823,7 +2925,7 @@ Scene.prototype.draw = function (clear) {
     // self._fxaaEffect.pass(self._framebuffer);
   }*/
 
-  // self._glowEffect.pass();
+  self._glowEffect.pass();
 };
 
 Scene.prototype.add = function (object) {
@@ -2832,10 +2934,16 @@ Scene.prototype.add = function (object) {
   self._dirty = true;
 };
 
+Scene.prototype.clear = function () {
+  var self = this;
+  self._objects = [];
+  self._dirty = true;
+};
+
 Scene.prototype._getVertexArrayObject = function (type) {
   var self = this,
     gl = self._gl,
-    geometry = geometries[type],
+    geometry = wg.geometries[type],
     vao = gl.cache.vaos[type];
   if (geometry && !vao) {
     vao = gl.cache.vaos[type] = new VertexArrayObject(self, {
