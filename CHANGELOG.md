@@ -5,9 +5,17 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 
+## [0.8.1] - 2017-09-23
+### Added
+- dat.gui
+
+
 ## [0.8.0] - 2017-09-22
 ### Added
 - WebVR: add vive controller
+
+### Fixed
+- WebVR: glow bug
 
 
 ## [0.7.0] - 2017-09-21

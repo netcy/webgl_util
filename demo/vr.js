@@ -11,7 +11,7 @@ function init () {
   glMatrix.setMatrixArrayType(Array);
   scene = new wg.Scene('canvas');
   scene.setLightPosition([0, 10, 0]);
-  scene.getCamera().setPosition(0, 0, 1);
+  scene.getCamera().setPosition(0, 0, 4);
   rayScale[1] = scene.getCamera().getFar();
 
   wg.ObjParser.parseObjMtlUrl('obj/vive/', 'vr_controller_vive_1_5', function (obj) {
@@ -20,6 +20,9 @@ function init () {
   });
   scene.onGamepadRender = onGamepadRender;
   addData();
+  var gui = createGUI(scene);
+  gui.add(scene, 'enterVR').name('Enter VR');
+  gui.add(scene, 'exitVR').name('Exit VR');
 }
 
 function onGamepadRender (leftGamePad, rightGamePad, pressedGamePad) {

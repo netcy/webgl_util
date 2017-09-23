@@ -8,7 +8,7 @@ function init () {
     antialias: false,
     stencil: true
   }*/);
-  scene.getCamera().setFovy(60/180*Math.PI);
+  scene.getCamera().setFovy(60);
   scene.getCamera().setNear(0.1);
   scene.getCamera().setFar(20);
   scene.getCamera().setTarget(0, 0.4, 0);
@@ -16,6 +16,8 @@ function init () {
   scene.setClearColor([1, 1, 1, 0]);
   scene.setLightPosition([0.0, 4.0, 0.0]);
   scene.setAmbientColor([0.4, 0.4, 0.4]);
+
+  var gui = createGUI(scene);
 
   /*var floor = new wg.Cube();
   vec2.set(floor.textureScale, 100, 100);

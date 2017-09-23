@@ -211,5 +211,5 @@ function createTruncatedCone(
 
 addGeometry('cube', createCube(1));
 addGeometry('torus', createTorus(32, 32, 0.5, 1));
-addGeometry('sphere', createSphere(32, 32, 1));
+addGeometry('sphere', createSphere(32, 32, 0.5));
 addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));

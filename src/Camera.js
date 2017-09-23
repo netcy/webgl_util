@@ -14,7 +14,7 @@ var Camera = wg.Camera = function (scene) {
   self._target = vec3.create();
   self._up = vec3.fromValues(0, 1, 0);
 
-  self._fovy = 45 / 180 * Math.PI;
+  self._fovy = 45;
   self._aspect = canvas.width / canvas.height;
   self._near = 0.1;
   self._far = 1000;
@@ -115,6 +115,11 @@ Camera.prototype.setPosition = function (x, y, z) {
   var self = this,
     newPosition = vec3.create(),
     xz;
+  if (x.length) {
+    z = x[2];
+    y = x[1];
+    x = x[0];
+  }
   vec3.set(self._position, x, y, z);
   vec3.subtract(newPosition, self._position, self._target);
   xz = Math.sqrt(newPosition[0]*newPosition[0] + newPosition[2] * newPosition[2]);
@@ -130,6 +135,11 @@ Camera.prototype.getTarget = function () {
 
 Camera.prototype.setTarget = function (x, y, z) {
   var self = this;
+  if (x.length) {
+    z = x[2];
+    y = x[1];
+    x = x[0];
+  }
   vec3.set(self._target, x, y, z);
   self.invalidateViewMatrix();
 };
@@ -183,7 +193,7 @@ Camera.prototype.getProjectMatrix = function () {
   var self = this,
     projectMatix = self._projectMatix;
   if (self._projectDirty) {
-    mat4.perspective(projectMatix, self._fovy, self._aspect, self._near, self._far);
+    mat4.perspective(projectMatix, self._fovy / 180 * Math.PI, self._aspect, self._near, self._far);
     self._projectDirty = false;
   }
   return projectMatix;
