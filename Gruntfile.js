@@ -11,10 +11,12 @@ module.exports = function (grunt) {
   grunt.config('concat.all', {
     src: [
       'src/Util.js',
+      'src/Trigger.js',
       'src/Geometries.js',
       'src/Program.js',
       'src/Framebuffer.js',
       'src/Texture.js',
+      'src/TextureCache.js',
       'src/VertexArrayObject.js',
       'src/Effect.js',
       'src/FxaaEffect.js',

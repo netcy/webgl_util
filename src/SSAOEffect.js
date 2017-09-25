@@ -232,9 +232,6 @@ var SSAOEffect = wg.SSAOEffect = function (scene) {
     mipmap: false,
     minFilter: 'LINEAR',
     magFilter: 'LINEAR',
-    callback: function () {
-      scene.redraw();
-    },
     flipY: false
   });
 };

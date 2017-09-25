@@ -20,9 +20,7 @@ function init () {
   });
   scene.onGamepadRender = onGamepadRender;
   addData();
-  var gui = createGUI(scene);
-  gui.add(scene, 'enterVR').name('Enter VR');
-  gui.add(scene, 'exitVR').name('Exit VR');
+  createGUI(scene);
 }
 
 function onGamepadRender (leftGamePad, rightGamePad, pressedGamePad) {

@@ -128,7 +128,9 @@ OutlineEffect.prototype.getOutputTexture = function () {
 };
 
 OutlineEffect.prototype.setOutlineColor = function (outlineColor) {
+  var self = this;
   this._outlineColor = outlineColor;
+  self._scene.redraw();
 };
 
 OutlineEffect.prototype.getOutlineColor = function () {
@@ -136,7 +138,9 @@ OutlineEffect.prototype.getOutlineColor = function () {
 };
 
 OutlineEffect.prototype.setOutlineWidth = function (outlineWidth) {
-  this._outlineWidth = outlineWidth;
+  var self = this;
+  self._outlineWidth = outlineWidth;
+  self._scene.redraw();
 };
 
 OutlineEffect.prototype.getOutlineWidth = function () {
@@ -144,7 +148,9 @@ OutlineEffect.prototype.getOutlineWidth = function () {
 };
 
 OutlineEffect.prototype.setOutlineGap = function (outlineGap) {
+  var self = this;
   this._outlineGap = outlineGap;
+  self._scene.redraw();
 };
 
 OutlineEffect.prototype.getOutlineGap = function () {

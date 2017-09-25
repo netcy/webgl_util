@@ -109,6 +109,110 @@ var ajax = Util.ajax = function (url, callback) {
   xhr.send();
 };
 
+// Source: src/Trigger.js
+var Trigger = wg.Trigger = function () {
+  this._listeners = {};
+};
+Object.assign(Trigger.prototype, {
+  on: function (type, listener, thisArg) {
+    if (!type || !listener) {
+      return this;
+    }
+    var self = this,
+      listeners = self._listeners,
+      bundles = listeners[type],
+      bundle = {
+        listener: listener,
+        thisArg: thisArg
+      },
+      _listener = listener._listener || listener;
+    if (!bundles) {
+      listeners[type] = bundle;
+    } else if (Array.isArray(bundles)) {
+      if (!bundles.some(function (item) {
+          return (item.listener._listener || item.listener) === _listener;
+        })) {
+        bundles.push(bundle);
+      }
+    } else {
+      if ((bundles.listener._listener || bundles.listener) !== _listener) {
+        listeners[type] = [bundles, bundle];
+      }
+    }
+    return self;
+  },
+  once: function (type, listener, thisArg) {
+    if (!type || !listener) {
+      return this;
+    }
+    var self = this,
+      newListener = function (event) {
+        listener.call(thisArg, event);
+        self.off(type, listener);
+      };
+    newListener._listener = listener;
+    self.on(type, newListener, thisArg);
+    return self;
+  },
+  off: function (type, listener) {
+    var self = this,
+      listeners = self._listeners,
+      bundles = listeners[type],
+      i, bundle;
+    if (Array.isArray(bundles)) {
+      bundles.some(function (bundle, i) {
+        if ((bundle.listener._listener || bundle.listener) === listener) {
+          bundles.splice(i, 1);
+          return true;
+        }
+        return false;
+      });
+    } else if (bundles && ((bundles.listener._listener || bundles.listener) === listener)) {
+      delete listeners[type];
+    }
+    return self;
+  },
+  fire: function (event) {
+    var self = this,
+      listeners = self._listeners,
+      strictBundles = listeners[event.type],
+      allBundles = listeners['all'],
+      bundles;
+    if (Array.isArray(strictBundles)) {
+      if (allBundles) {
+        bundles = strictBundles.concat(allBundles);
+      } else {
+        // Important, bundles will be changed if there is a once listener
+        bundles = strictBundles.slice();
+      }
+    } else if (strictBundles) {
+      if (allBundles) {
+        bundles = [].concat(strictBundles, allBundles);
+      } else {
+        bundles = strictBundles;
+      }
+    } else {
+      bundles = Array.isArray(allBundles) ? allBundles.slice() : allBundles;
+    }
+    if (Array.isArray(bundles)) {
+      bundles.forEach(function (bundle) {
+        bundle.listener.call(bundle.thisArg, event);
+      });
+    } else if (bundles) {
+      bundles.listener.call(bundles.thisArg, event);
+    }
+    return self;
+  },
+  count: function (type) {
+    var bundles = this._listeners[type];
+    if (bundles) {
+      return Array.isArray(bundles) ? bundles.length : 1;
+    } else {
+      return 0;
+    }
+  }
+});
+
 // Source: src/Geometries.js
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
@@ -623,12 +727,11 @@ Framebuffer.prototype.dispose = function () {
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
-    url = options.url,
-    callback = options.callback;
+    url = options.url;
 
   self._gl = gl;
-  self._options = options,
-    self._initialized = false;
+  self._options = options;
+  self._initialized = false;
   self._imageLoaded = false;
   self._texture = gl.createTexture();
   self._unit = 0;
@@ -641,15 +744,19 @@ var Texture = wg.Texture = function (gl, options) {
       image.onerror = null;
       delete gl.initingTextures[url];
       self._imageLoaded = true;
-
-      callback && callback();
+      gl.cache.textures.trigger.fire({
+        type: 'load',
+        source: self
+      });
     };
     image.onerror = function () {
       image.onload = null;
       image.onerror = null;
       delete gl.initingTextures[url];
-
-      callback && callback();
+      gl.cache.textures.trigger.fire({
+        type: 'error',
+        source: self
+      });
     };
     image.src = url;
   }
@@ -764,6 +871,27 @@ Texture.prototype.dispose = function () {
   self._texture = null;
 };
 
+// Source: src/TextureCache.js
+var TextureCache = function (gl) {
+  var self = this;
+  self.gl = gl;
+  self.cache = {};
+  self.trigger = new Trigger();
+};
+
+TextureCache.prototype.get = function (url) {
+  var self = this,
+    cache = self.cache,
+    gl = self.gl;
+  var imageTexture = cache[url];
+  if (!imageTexture) {
+    imageTexture = cache[url] = new Texture(gl, {
+      url: url
+    });
+  }
+  return imageTexture;
+};
+
 // Source: src/VertexArrayObject.js
 /**
  * VertexArrayObject
@@ -851,22 +979,8 @@ VertexArrayObject.prototype.draw = function (withMaterial) {
           self._scene._sceneProgram.setUniforms({
             u_texture: !!part.image
           });
-          // TODO move to globle cache
           if (part.image) {
-            var image = part.image;
-            if (!image.url) {
-              image = part.image = {
-                url: image
-              };
-            }
-            var imageTexture = image.texture;
-            if (!imageTexture) {
-              image.callback = function () {
-                self._scene.redraw();
-              };
-              imageTexture = image.texture = new Texture(gl, image);
-            }
-            imageTexture.bind(0);
+            gl.cache.textures.get(part.image).bind(0);
           } else {
             gl.vertexAttrib4fv(attributesMap.color.index, part.color);
           }
@@ -1563,7 +1677,9 @@ OutlineEffect.prototype.getOutputTexture = function () {
 };
 
 OutlineEffect.prototype.setOutlineColor = function (outlineColor) {
+  var self = this;
   this._outlineColor = outlineColor;
+  self._scene.redraw();
 };
 
 OutlineEffect.prototype.getOutlineColor = function () {
@@ -1571,7 +1687,9 @@ OutlineEffect.prototype.getOutlineColor = function () {
 };
 
 OutlineEffect.prototype.setOutlineWidth = function (outlineWidth) {
-  this._outlineWidth = outlineWidth;
+  var self = this;
+  self._outlineWidth = outlineWidth;
+  self._scene.redraw();
 };
 
 OutlineEffect.prototype.getOutlineWidth = function () {
@@ -1579,7 +1697,9 @@ OutlineEffect.prototype.getOutlineWidth = function () {
 };
 
 OutlineEffect.prototype.setOutlineGap = function (outlineGap) {
+  var self = this;
   this._outlineGap = outlineGap;
+  self._scene.redraw();
 };
 
 OutlineEffect.prototype.getOutlineGap = function () {
@@ -1903,11 +2023,56 @@ GlowEffect.prototype.getOutputTexture = function () {
 };
 
 GlowEffect.prototype.setGlowColor = function (glowColor) {
-  this._glowColor = glowColor;
+  var self = this;
+  self._glowColor = glowColor;
+  self._scene.redraw();
 };
 
 GlowEffect.prototype.getGlowColor = function () {
   return this._glowColor;
+};
+
+GlowEffect.prototype.setBlurAmount = function (blurAmount) {
+  var self = this;
+  self._blurAmount = blurAmount;
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurAmount = function () {
+  return this._blurAmount;
+};
+
+GlowEffect.prototype.setBlurScale = function (blurScale) {
+  var self = this;
+  self._blurScale = blurScale;
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurScale = function () {
+  return this._blurScale;
+};
+
+GlowEffect.prototype.setBlurStrength = function (blurStrength) {
+  var self = this;
+  self._blurStrength = blurStrength;
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurStrength = function () {
+  return this._blurStrength;
+};
+
+GlowEffect.prototype.setBlurSize = function (blurSize) {
+  var self = this;
+  self._blurSize = blurSize;
+  self._colorFramebuffer.setSize(blurSize, blurSize);
+  self._hBlurFramebuffer.setSize(blurSize, blurSize);
+  self._vBlurFramebuffer.setSize(blurSize, blurSize);
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurSize = function () {
+  return this._blurSize;
 };
 
 // Source: src/SSAOEffect.js
@@ -2145,9 +2310,6 @@ var SSAOEffect = wg.SSAOEffect = function (scene) {
     mipmap: false,
     minFilter: 'LINEAR',
     magFilter: 'LINEAR',
-    callback: function () {
-      scene.redraw();
-    },
     flipY: false
   });
 };
@@ -2561,8 +2723,10 @@ attribute vec4 a_color;
 uniform mat4 u_projectMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat4 u_modelMatrix;
+uniform mat4 u_invertModelMatrix;
 uniform mat3 u_normalMatrix;
 uniform vec2 u_textureScale;
+uniform bool u_normalMap;
 
 uniform vec3 u_lightPosition;
 uniform vec3 u_eyePosition;
@@ -2580,8 +2744,21 @@ void main () {
   v_color = a_color;
 
   vec3 worldPosition = (u_modelMatrix * a_position).xyz;
-  v_lightDirection = u_lightPosition - worldPosition;
-  v_eyeDirection = u_eyePosition - worldPosition;
+  if (u_normalMap) {
+    vec3 eye      = (u_invertModelMatrix * vec4(u_eyePosition, 0.0)).xyz - worldPosition;
+    vec3 light    = (u_invertModelMatrix * vec4(u_lightPosition, 0.0)).xyz - worldPosition;
+    vec3 t = normalize(cross(a_normal, vec3(0.0, 1.0, 0.0)));
+    vec3 b = cross(a_normal, t);
+    v_eyeDirection.x   = dot(t, eye);
+    v_eyeDirection.y   = dot(b, eye);
+    v_eyeDirection.z   = dot(a_normal, eye);
+    v_lightDirection.x = dot(t, light);
+    v_lightDirection.y = dot(b, light);
+    v_lightDirection.z = dot(a_normal, light);
+  } else {
+    v_lightDirection = u_lightPosition - worldPosition;
+    v_eyeDirection = u_eyePosition - worldPosition;
+  }
 }
 `;
 
@@ -2593,7 +2770,8 @@ var FRAGMENT_SHADER_SCENE = `
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
 uniform bool u_texture;
-uniform sampler2D u_sampler;
+uniform sampler2D u_samplerImage;
+uniform sampler2D u_samplerNormal;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
@@ -2610,7 +2788,7 @@ void main () {
   vec3 reflectDirection = reflect(-lightDirection, normal);
   float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
 
-  vec4 color = u_texture ? texture2D(u_sampler, v_uv) : v_color;
+  vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
   vec3 ambientColor = u_ambientColor * color.rgb;
   vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
   vec3 specularColor = u_lightColor * specular;
@@ -2702,7 +2880,11 @@ var Scene = wg.Scene = function (canvas, options) {
   });
 
   function init () {
-    gl.cache = { textures: {} };
+    if (gl.cache) {
+      gl.cache.textures.trigger.off('load', self._handleImageLoaded);
+    }
+    gl.cache = { textures: new TextureCache(gl) };
+    gl.cache.textures.trigger.on('load', self._handleImageLoaded, self);
     gl.cache.quadVao = new VertexArrayObject(self, {
       buffers: {
         position: [
@@ -2869,7 +3051,9 @@ Scene.prototype.draw = function () {
     u_lightPosition: self._lightPosition,
     u_eyePosition: camera._position,
     u_lightColor: self._lightColor,
-    u_ambientColor: self._ambientColor
+    u_ambientColor: self._ambientColor,
+    u_samplerImage: 0,
+    u_samplerNormal: 1,
   });
   self._objects.forEach(function (object) {
     if (object.visible === false) {
@@ -2880,40 +3064,21 @@ Scene.prototype.draw = function () {
       sceneProgram.setUniforms({
         u_modelMatrix: object.getModelMatrix(),
         u_normalMatrix: object.getNormalMatrix(),
-        u_sampler: 0,
         u_texture: !!object.image,
-        u_textureScale: object.textureScale
+        u_textureScale: object.textureScale,
+        u_normalMap: !!object.imageNormal,
+        u_invertModelMatrix: object.getInvertModelMatrix(),
       });
       if (object.image) {
-        var image = object.image;
-        if (!image.url) {
-          image = object.image = {
-            url: image
-          };
-        }
-        // TODO cache
-        /*var imageTexture = gl.cache.textures[image.url];
-        if (!imageTexture) {
-          imageTexture = gl.cache.textures[image.url] = new Texture(gl, {
-            url: image.url,
-            callback: function () {
-              self.redraw();
-            }
-          });
-        }*/
-        var imageTexture = image.texture;
-        if (!imageTexture) {
-          image.callback = function () {
-            self.redraw();
-          };
-          imageTexture = image.texture = new Texture(gl, image);
-        }
-        imageTexture.bind(0);
+        gl.cache.textures.get(object.image).bind(0);
       } else {
         gl.cache.emptyTexture.bind(0);
         if (!vao._color) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
+      }
+      if (object.imageNormal) {
+        gl.cache.textures.get(object.imageNormal).bind(1);
       }
       vao.draw(true);
     }
@@ -3108,12 +3273,22 @@ Scene.prototype.setEnableSSAO = function (enableSSAO) {
   this.redraw();
 };
 
+Scene.prototype._handleImageLoaded = function (event) {
+  this.redraw();
+};
+
+Scene.prototype.dispose = function  () {
+  var self = this;
+  self._gl.cache.textures.trigger.off('load', self._handleImageLoaded);
+};
+
 // Source: src/Object.js
 var objectId = 1;
 wg.Object = function () {
   var self = this;
   self.id = objectId++;
   self._modelMatrix = mat4.create();
+  self._invertModelMatrix = mat4.create();
   self._normalMatrix = mat3.create();
   self.type = null;
   self._position = vec3.create();
@@ -3154,6 +3329,7 @@ wg.Object.prototype._calculateMatrix = function () {
     mat4.rotateY(self._modelMatrix, self._modelMatrix, self._rotation[1]);
     mat4.rotateZ(self._modelMatrix, self._modelMatrix, self._rotation[2]);
     mat4.scale(self._modelMatrix, self._modelMatrix, self._scale);
+    mat4.invert(self._invertModelMatrix, self._invertModelMatrix);
     mat3.normalFromMat4(self._normalMatrix, self._modelMatrix);
   }
 };
@@ -3164,6 +3340,14 @@ wg.Object.prototype.getModelMatrix = function () {
     self._calculateMatrix();
   }
   return self._modelMatrix;
+};
+
+wg.Object.prototype.getInvertModelMatrix = function () {
+  var self = this;
+  if (self._matrixDirty) {
+    self._calculateMatrix();
+  }
+  return self._invertModelMatrix;
 };
 
 wg.Object.prototype.getNormalMatrix = function () {

@@ -11,8 +11,10 @@ attribute vec4 a_color;
 uniform mat4 u_projectMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat4 u_modelMatrix;
+uniform mat4 u_invertModelMatrix;
 uniform mat3 u_normalMatrix;
 uniform vec2 u_textureScale;
+uniform bool u_normalMap;
 
 uniform vec3 u_lightPosition;
 uniform vec3 u_eyePosition;
@@ -30,8 +32,21 @@ void main () {
   v_color = a_color;
 
   vec3 worldPosition = (u_modelMatrix * a_position).xyz;
-  v_lightDirection = u_lightPosition - worldPosition;
-  v_eyeDirection = u_eyePosition - worldPosition;
+  if (u_normalMap) {
+    vec3 eye      = (u_invertModelMatrix * vec4(u_eyePosition, 0.0)).xyz - worldPosition;
+    vec3 light    = (u_invertModelMatrix * vec4(u_lightPosition, 0.0)).xyz - worldPosition;
+    vec3 t = normalize(cross(a_normal, vec3(0.0, 1.0, 0.0)));
+    vec3 b = cross(a_normal, t);
+    v_eyeDirection.x   = dot(t, eye);
+    v_eyeDirection.y   = dot(b, eye);
+    v_eyeDirection.z   = dot(a_normal, eye);
+    v_lightDirection.x = dot(t, light);
+    v_lightDirection.y = dot(b, light);
+    v_lightDirection.z = dot(a_normal, light);
+  } else {
+    v_lightDirection = u_lightPosition - worldPosition;
+    v_eyeDirection = u_eyePosition - worldPosition;
+  }
 }
 `;
 
@@ -43,7 +58,8 @@ var FRAGMENT_SHADER_SCENE = `
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
 uniform bool u_texture;
-uniform sampler2D u_sampler;
+uniform sampler2D u_samplerImage;
+uniform sampler2D u_samplerNormal;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
@@ -60,7 +76,7 @@ void main () {
   vec3 reflectDirection = reflect(-lightDirection, normal);
   float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
 
-  vec4 color = u_texture ? texture2D(u_sampler, v_uv) : v_color;
+  vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
   vec3 ambientColor = u_ambientColor * color.rgb;
   vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
   vec3 specularColor = u_lightColor * specular;
@@ -152,7 +168,11 @@ var Scene = wg.Scene = function (canvas, options) {
   });
 
   function init () {
-    gl.cache = { textures: {} };
+    if (gl.cache) {
+      gl.cache.textures.trigger.off('load', self._handleImageLoaded);
+    }
+    gl.cache = { textures: new TextureCache(gl) };
+    gl.cache.textures.trigger.on('load', self._handleImageLoaded, self);
     gl.cache.quadVao = new VertexArrayObject(self, {
       buffers: {
         position: [
@@ -319,7 +339,9 @@ Scene.prototype.draw = function () {
     u_lightPosition: self._lightPosition,
     u_eyePosition: camera._position,
     u_lightColor: self._lightColor,
-    u_ambientColor: self._ambientColor
+    u_ambientColor: self._ambientColor,
+    u_samplerImage: 0,
+    u_samplerNormal: 1,
   });
   self._objects.forEach(function (object) {
     if (object.visible === false) {
@@ -330,40 +352,21 @@ Scene.prototype.draw = function () {
       sceneProgram.setUniforms({
         u_modelMatrix: object.getModelMatrix(),
         u_normalMatrix: object.getNormalMatrix(),
-        u_sampler: 0,
         u_texture: !!object.image,
-        u_textureScale: object.textureScale
+        u_textureScale: object.textureScale,
+        u_normalMap: !!object.imageNormal,
+        u_invertModelMatrix: object.getInvertModelMatrix(),
       });
       if (object.image) {
-        var image = object.image;
-        if (!image.url) {
-          image = object.image = {
-            url: image
-          };
-        }
-        // TODO cache
-        /*var imageTexture = gl.cache.textures[image.url];
-        if (!imageTexture) {
-          imageTexture = gl.cache.textures[image.url] = new Texture(gl, {
-            url: image.url,
-            callback: function () {
-              self.redraw();
-            }
-          });
-        }*/
-        var imageTexture = image.texture;
-        if (!imageTexture) {
-          image.callback = function () {
-            self.redraw();
-          };
-          imageTexture = image.texture = new Texture(gl, image);
-        }
-        imageTexture.bind(0);
+        gl.cache.textures.get(object.image).bind(0);
       } else {
         gl.cache.emptyTexture.bind(0);
         if (!vao._color) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
+      }
+      if (object.imageNormal) {
+        gl.cache.textures.get(object.imageNormal).bind(1);
       }
       vao.draw(true);
     }
@@ -556,4 +559,13 @@ Scene.prototype.getEnableSSAO = function () {
 Scene.prototype.setEnableSSAO = function (enableSSAO) {
   this._enableSSAO = enableSSAO;
   this.redraw();
+};
+
+Scene.prototype._handleImageLoaded = function (event) {
+  this.redraw();
+};
+
+Scene.prototype.dispose = function  () {
+  var self = this;
+  self._gl.cache.textures.trigger.off('load', self._handleImageLoaded);
 };

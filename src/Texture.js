@@ -20,12 +20,11 @@
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
-    url = options.url,
-    callback = options.callback;
+    url = options.url;
 
   self._gl = gl;
-  self._options = options,
-    self._initialized = false;
+  self._options = options;
+  self._initialized = false;
   self._imageLoaded = false;
   self._texture = gl.createTexture();
   self._unit = 0;
@@ -38,15 +37,19 @@ var Texture = wg.Texture = function (gl, options) {
       image.onerror = null;
       delete gl.initingTextures[url];
       self._imageLoaded = true;
-
-      callback && callback();
+      gl.cache.textures.trigger.fire({
+        type: 'load',
+        source: self
+      });
     };
     image.onerror = function () {
       image.onload = null;
       image.onerror = null;
       delete gl.initingTextures[url];
-
-      callback && callback();
+      gl.cache.textures.trigger.fire({
+        type: 'error',
+        source: self
+      });
     };
     image.src = url;
   }

@@ -314,9 +314,54 @@ GlowEffect.prototype.getOutputTexture = function () {
 };
 
 GlowEffect.prototype.setGlowColor = function (glowColor) {
-  this._glowColor = glowColor;
+  var self = this;
+  self._glowColor = glowColor;
+  self._scene.redraw();
 };
 
 GlowEffect.prototype.getGlowColor = function () {
   return this._glowColor;
+};
+
+GlowEffect.prototype.setBlurAmount = function (blurAmount) {
+  var self = this;
+  self._blurAmount = blurAmount;
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurAmount = function () {
+  return this._blurAmount;
+};
+
+GlowEffect.prototype.setBlurScale = function (blurScale) {
+  var self = this;
+  self._blurScale = blurScale;
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurScale = function () {
+  return this._blurScale;
+};
+
+GlowEffect.prototype.setBlurStrength = function (blurStrength) {
+  var self = this;
+  self._blurStrength = blurStrength;
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurStrength = function () {
+  return this._blurStrength;
+};
+
+GlowEffect.prototype.setBlurSize = function (blurSize) {
+  var self = this;
+  self._blurSize = blurSize;
+  self._colorFramebuffer.setSize(blurSize, blurSize);
+  self._hBlurFramebuffer.setSize(blurSize, blurSize);
+  self._vBlurFramebuffer.setSize(blurSize, blurSize);
+  self._scene.redraw();
+};
+
+GlowEffect.prototype.getBlurSize = function () {
+  return this._blurSize;
 };

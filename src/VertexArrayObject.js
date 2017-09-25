@@ -84,22 +84,8 @@ VertexArrayObject.prototype.draw = function (withMaterial) {
           self._scene._sceneProgram.setUniforms({
             u_texture: !!part.image
           });
-          // TODO move to globle cache
           if (part.image) {
-            var image = part.image;
-            if (!image.url) {
-              image = part.image = {
-                url: image
-              };
-            }
-            var imageTexture = image.texture;
-            if (!imageTexture) {
-              image.callback = function () {
-                self._scene.redraw();
-              };
-              imageTexture = image.texture = new Texture(gl, image);
-            }
-            imageTexture.bind(0);
+            gl.cache.textures.get(part.image).bind(0);
           } else {
             gl.vertexAttrib4fv(attributesMap.color.index, part.color);
           }
