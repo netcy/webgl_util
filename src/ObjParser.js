@@ -14,7 +14,7 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
   if (!obj) {
     return null;
   }
-  console.time('parse');
+  // console.time('parse');
   urlPath = urlPath || '';
   urlPath.endsWith('/') || (urlPath = urlPath + '/');
   urlPath = urlPath + (urlPath.endsWith('/') ? '' : '/');
@@ -218,7 +218,7 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
       }
     }
   });
-  console.timeEnd('parse');
+  // console.timeEnd('parse');
   return {
     position: result.vertices,
     normal: result.normals,

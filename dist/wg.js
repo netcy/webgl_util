@@ -216,7 +216,7 @@ Object.assign(Trigger.prototype, {
 // Source: src/Geometries.js
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
-  wg.geometries[name] = geometry;
+  wg.geometries[name] = calculateTangent(geometry);
 };
 
 var createCube = Util.createCube = function (side) {
@@ -430,12 +430,71 @@ addGeometry('torus', createTorus(32, 32, 0.5, 1));
 addGeometry('sphere', createSphere(32, 32, 0.5));
 addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
 
+function calculateTangent (geometry) {
+  var indices = geometry.index,
+    uvs = geometry.uv,
+    vertices = geometry.position,
+    tangents = [],
+    gtangent = geometry.tangent = [],
+    v0 = vec3.create(),
+    v1 = vec3.create(),
+    v2 = vec3.create(),
+    u0 = vec2.create(),
+    u1 = vec2.create(),
+    u2 = vec2.create(),
+    edge1 = vec3.create(),
+    edge2 = vec3.create(),
+    tangent = vec3.create();
+  for (var i = 0, n = vertices.length / 3; i < n; i++) {
+    tangents[i] = vec3.create();
+  }
+  for (var i = 0, n = indices.length; i < n; i += 3) {
+    var i0 = indices[i];
+    var i1 = indices[i + 1];
+    var i2 = indices[i + 2];
+
+    vec3.set(v0, vertices[i0 * 3], vertices[i0 * 3 + 1], vertices[i0 * 3 + 2]);
+    vec3.set(v1, vertices[i1 * 3], vertices[i1 * 3 + 1], vertices[i1 * 3 + 2]);
+    vec3.set(v2, vertices[i2 * 3], vertices[i2 * 3 + 1], vertices[i2 * 3 + 2]);
+
+    vec3.subtract(edge1, v1, v0);
+    vec3.subtract(edge2, v2, v0);
+
+    vec2.set(u0, uvs[i0 * 2], uvs[i0 * 2 + 1]);
+    vec2.set(u1, uvs[i1 * 2], uvs[i1 * 2 + 1]);
+    vec2.set(u2, uvs[i2 * 2], uvs[i2 * 2 + 1]);
+
+    var deltaU1 = u1[0] - u0[0];
+    var deltaV1 = u1[1] - u0[1];
+    var deltaU2 = u2[0] - u0[0];
+    var deltaV2 = u2[1] - u0[1];
+
+    var f = 1.0 / (deltaU1 * deltaV2 - deltaU2 * deltaV1);
+
+    vec3.set(tangent, f * (deltaV2 * edge1[0] - deltaV1 * edge2[0]),
+      f * (deltaV2 * edge1[1] - deltaV1 * edge2[1]),
+      f * (deltaV2 * edge1[2] - deltaV1 * edge2[2]));
+
+    vec3.add(tangents[i0], tangents[i0], tangent);
+    vec3.add(tangents[i1], tangents[i1], tangent);
+    vec3.add(tangents[i2], tangents[i2], tangent);
+  }
+
+  for (var i = 0, n = tangents.length; i < n; i++) {
+    vec3.normalize(tangents[i], tangents[i]);
+    gtangent.push(tangents[i][0], tangents[i][1], tangents[i][2]);
+  }
+  return geometry;
+}
+
 // Source: src/Program.js
 var attributesMap = {
   position: { index: 0, size: 3 },
   normal: { index: 1, size: 3 },
   uv: { index: 2, size: 2 },
   color: { index: 3, size: 4 },
+  tangent: { index: 4, size: 3 },
+  bitangent: { index: 5, size: 3 },
 };
 
 var Program = wg.Program = function (gl, options) {
@@ -880,6 +939,7 @@ var TextureCache = function (gl) {
 };
 
 TextureCache.prototype.get = function (url) {
+  // TODO same url, but different options
   var self = this,
     cache = self.cache,
     gl = self.gl;
@@ -2715,21 +2775,19 @@ var VERTEX_SHADER_SCENE = `
   precision highp float;
 #endif
 
-attribute vec4 a_position;
+attribute vec3 a_position;
 attribute vec3 a_normal;
 attribute vec2 a_uv;
 attribute vec4 a_color;
+attribute vec3 a_tangent;
 
-uniform mat4 u_projectMatrix;
-uniform mat4 u_viewMatrix;
-uniform mat4 u_modelMatrix;
-uniform mat4 u_invertModelMatrix;
+uniform mat4 u_modelViewProjectMatrix;
+uniform mat4 u_modelViewMatrix;
 uniform mat3 u_normalMatrix;
 uniform vec2 u_textureScale;
 uniform bool u_normalMap;
 
 uniform vec3 u_lightPosition;
-uniform vec3 u_eyePosition;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
@@ -2738,26 +2796,26 @@ varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
 
 void main () {
-  gl_Position = u_projectMatrix * u_viewMatrix * u_modelMatrix * a_position;
+  vec4 position = vec4(a_position, 1.0);
+  gl_Position = u_modelViewProjectMatrix * position;
   v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv * u_textureScale;
   v_color = a_color;
 
-  vec3 worldPosition = (u_modelMatrix * a_position).xyz;
+  vec3 viewPosition = (u_modelViewMatrix * position).xyz;
+  v_lightDirection = u_lightPosition - viewPosition;
+  v_eyeDirection = -viewPosition;
+
   if (u_normalMap) {
-    vec3 eye      = (u_invertModelMatrix * vec4(u_eyePosition, 0.0)).xyz - worldPosition;
-    vec3 light    = (u_invertModelMatrix * vec4(u_lightPosition, 0.0)).xyz - worldPosition;
-    vec3 t = normalize(cross(a_normal, vec3(0.0, 1.0, 0.0)));
-    vec3 b = cross(a_normal, t);
-    v_eyeDirection.x   = dot(t, eye);
-    v_eyeDirection.y   = dot(b, eye);
-    v_eyeDirection.z   = dot(a_normal, eye);
-    v_lightDirection.x = dot(t, light);
-    v_lightDirection.y = dot(b, light);
-    v_lightDirection.z = dot(a_normal, light);
-  } else {
-    v_lightDirection = u_lightPosition - worldPosition;
-    v_eyeDirection = u_eyePosition - worldPosition;
+    vec3 tangent = u_normalMatrix * a_tangent;
+    vec3 bitangent = cross(v_normal, tangent);
+    mat3 tbnMatrix = mat3(
+      tangent.x, bitangent.x, v_normal.x,
+      tangent.y, bitangent.y, v_normal.y,
+      tangent.z, bitangent.z, v_normal.z
+    );
+    v_lightDirection = tbnMatrix * v_lightDirection;
+    v_eyeDirection =  tbnMatrix * v_eyeDirection;
   }
 }
 `;
@@ -2770,6 +2828,7 @@ var FRAGMENT_SHADER_SCENE = `
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
 uniform bool u_texture;
+uniform bool u_normalMap;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
 
@@ -2780,18 +2839,18 @@ varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
 
 void main () {
-  vec3 normal = normalize(v_normal);
+  vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normal);
   vec3 lightDirection = normalize(v_lightDirection);
   vec3 eyeDirection = normalize(v_eyeDirection);
   float diffuse = max(dot(lightDirection, normal), 0.0);
 
   vec3 reflectDirection = reflect(-lightDirection, normal);
-  float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 16.0);
+  float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
 
   vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
   vec3 ambientColor = u_ambientColor * color.rgb;
   vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-  vec3 specularColor = u_lightColor * specular;
+  vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
   gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
 }
 `;
@@ -2841,7 +2900,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._camera = new Camera(self);
   self._lightColor = [1, 1, 1];
   self._lightPosition = [10, 10, 10];
-  self._ambientColor = [.5, .5, .5];
+  self._ambientColor = [.3, .3, .3];
   self._clearColor = [0, 0, 0, 0];
   self._enableSSAO = false;
   self._clear = true;
@@ -3041,15 +3100,14 @@ Scene.prototype.draw = function () {
     sceneProgram = self._sceneProgram,
     outputProgram = self._outputProgram,
     camera = self._camera,
-    gl = self._gl;
+    gl = self._gl,
+    lightPosition = vec3.create();
   self._dirty = false;
   // self._framebuffer.bind();
   sceneProgram.use();
+  vec3.transformMat4(lightPosition, self._lightPosition, camera.getViewMatrix());
   sceneProgram.setUniforms({
-    u_projectMatrix: camera.getProjectMatrix(),
-    u_viewMatrix: camera.getViewMatrix(),
-    u_lightPosition: self._lightPosition,
-    u_eyePosition: camera._position,
+    u_lightPosition: lightPosition,
     u_lightColor: self._lightColor,
     u_ambientColor: self._ambientColor,
     u_samplerImage: 0,
@@ -3061,24 +3119,28 @@ Scene.prototype.draw = function () {
     }
     var vao = self._getVertexArrayObject(object.type);
     if (vao) {
+      object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
-        u_modelMatrix: object.getModelMatrix(),
-        u_normalMatrix: object.getNormalMatrix(),
+        u_normalMatrix: object._normalMatrix,
         u_texture: !!object.image,
         u_textureScale: object.textureScale,
         u_normalMap: !!object.imageNormal,
-        u_invertModelMatrix: object.getInvertModelMatrix(),
+        u_modelViewMatrix: object._modelViewMatrix,
+        u_modelViewProjectMatrix: object._modelViewProjectMatrix,
       });
       if (object.image) {
         gl.cache.textures.get(object.image).bind(0);
+        if (object.imageNormal) {
+          gl.cache.textures.get(object.imageNormal).bind(1);
+        } else {
+          gl.cache.emptyTexture.bind(1);
+        }
       } else {
         gl.cache.emptyTexture.bind(0);
+        gl.cache.emptyTexture.bind(1);
         if (!vao._color) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
-      }
-      if (object.imageNormal) {
-        gl.cache.textures.get(object.imageNormal).bind(1);
       }
       vao.draw(true);
     }
@@ -3288,7 +3350,8 @@ wg.Object = function () {
   var self = this;
   self.id = objectId++;
   self._modelMatrix = mat4.create();
-  self._invertModelMatrix = mat4.create();
+  self._modelViewMatrix = mat4.create();
+  self._modelViewProjectMatrix = mat4.create();
   self._normalMatrix = mat3.create();
   self.type = null;
   self._position = vec3.create();
@@ -3329,8 +3392,6 @@ wg.Object.prototype._calculateMatrix = function () {
     mat4.rotateY(self._modelMatrix, self._modelMatrix, self._rotation[1]);
     mat4.rotateZ(self._modelMatrix, self._modelMatrix, self._rotation[2]);
     mat4.scale(self._modelMatrix, self._modelMatrix, self._scale);
-    mat4.invert(self._invertModelMatrix, self._invertModelMatrix);
-    mat3.normalFromMat4(self._normalMatrix, self._modelMatrix);
   }
 };
 
@@ -3342,26 +3403,16 @@ wg.Object.prototype.getModelMatrix = function () {
   return self._modelMatrix;
 };
 
-wg.Object.prototype.getInvertModelMatrix = function () {
+wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {
   var self = this;
-  if (self._matrixDirty) {
-    self._calculateMatrix();
-  }
-  return self._invertModelMatrix;
-};
-
-wg.Object.prototype.getNormalMatrix = function () {
-  var self = this;
-  if (self._matrixDirty) {
-    self._calculateMatrix();
-  }
-  return self._normalMatrix;
+  mat4.multiply(self._modelViewMatrix, viewMatrix, self.getModelMatrix());
+  mat3.normalFromMat4(self._normalMatrix, self._modelViewMatrix);
+  mat4.multiply(self._modelViewProjectMatrix, projectMatrix, self._modelViewMatrix);
 };
 
 wg.Object.prototype.fromRotationTranslation = function (orientation, position) {
   var self = this;
   mat4.fromRotationTranslation(self._modelMatrix, orientation, position);
-  mat3.normalFromMat4(self._normalMatrix, self._modelMatrix);
 };
 
 // Source: src/Cube.js
@@ -3405,7 +3456,7 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
   if (!obj) {
     return null;
   }
-  console.time('parse');
+  // console.time('parse');
   urlPath = urlPath || '';
   urlPath.endsWith('/') || (urlPath = urlPath + '/');
   urlPath = urlPath + (urlPath.endsWith('/') ? '' : '/');
@@ -3609,7 +3660,7 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
       }
     }
   });
-  console.timeEnd('parse');
+  // console.timeEnd('parse');
   return {
     position: result.vertices,
     normal: result.normals,

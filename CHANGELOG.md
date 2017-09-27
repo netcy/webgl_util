@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.10.0] - 2017-09-27
+### Added
+- normal map
+
+
 ## [0.9.0] - 2017-09-25
 ### Added
 - more dat.gui settings

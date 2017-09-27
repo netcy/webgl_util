@@ -1,6 +1,6 @@
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
-  wg.geometries[name] = geometry;
+  wg.geometries[name] = calculateTangent(geometry);
 };
 
 var createCube = Util.createCube = function (side) {
@@ -213,3 +213,60 @@ addGeometry('cube', createCube(1));
 addGeometry('torus', createTorus(32, 32, 0.5, 1));
 addGeometry('sphere', createSphere(32, 32, 0.5));
 addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
+
+function calculateTangent (geometry) {
+  var indices = geometry.index,
+    uvs = geometry.uv,
+    vertices = geometry.position,
+    tangents = [],
+    gtangent = geometry.tangent = [],
+    v0 = vec3.create(),
+    v1 = vec3.create(),
+    v2 = vec3.create(),
+    u0 = vec2.create(),
+    u1 = vec2.create(),
+    u2 = vec2.create(),
+    edge1 = vec3.create(),
+    edge2 = vec3.create(),
+    tangent = vec3.create();
+  for (var i = 0, n = vertices.length / 3; i < n; i++) {
+    tangents[i] = vec3.create();
+  }
+  for (var i = 0, n = indices.length; i < n; i += 3) {
+    var i0 = indices[i];
+    var i1 = indices[i + 1];
+    var i2 = indices[i + 2];
+
+    vec3.set(v0, vertices[i0 * 3], vertices[i0 * 3 + 1], vertices[i0 * 3 + 2]);
+    vec3.set(v1, vertices[i1 * 3], vertices[i1 * 3 + 1], vertices[i1 * 3 + 2]);
+    vec3.set(v2, vertices[i2 * 3], vertices[i2 * 3 + 1], vertices[i2 * 3 + 2]);
+
+    vec3.subtract(edge1, v1, v0);
+    vec3.subtract(edge2, v2, v0);
+
+    vec2.set(u0, uvs[i0 * 2], uvs[i0 * 2 + 1]);
+    vec2.set(u1, uvs[i1 * 2], uvs[i1 * 2 + 1]);
+    vec2.set(u2, uvs[i2 * 2], uvs[i2 * 2 + 1]);
+
+    var deltaU1 = u1[0] - u0[0];
+    var deltaV1 = u1[1] - u0[1];
+    var deltaU2 = u2[0] - u0[0];
+    var deltaV2 = u2[1] - u0[1];
+
+    var f = 1.0 / (deltaU1 * deltaV2 - deltaU2 * deltaV1);
+
+    vec3.set(tangent, f * (deltaV2 * edge1[0] - deltaV1 * edge2[0]),
+      f * (deltaV2 * edge1[1] - deltaV1 * edge2[1]),
+      f * (deltaV2 * edge1[2] - deltaV1 * edge2[2]));
+
+    vec3.add(tangents[i0], tangents[i0], tangent);
+    vec3.add(tangents[i1], tangents[i1], tangent);
+    vec3.add(tangents[i2], tangents[i2], tangent);
+  }
+
+  for (var i = 0, n = tangents.length; i < n; i++) {
+    vec3.normalize(tangents[i], tangents[i]);
+    gtangent.push(tangents[i][0], tangents[i][1], tangents[i][2]);
+  }
+  return geometry;
+}

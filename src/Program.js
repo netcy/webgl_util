@@ -3,6 +3,8 @@ var attributesMap = {
   normal: { index: 1, size: 3 },
   uv: { index: 2, size: 2 },
   color: { index: 3, size: 4 },
+  tangent: { index: 4, size: 3 },
+  bitangent: { index: 5, size: 3 },
 };
 
 var Program = wg.Program = function (gl, options) {
