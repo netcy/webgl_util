@@ -77,29 +77,33 @@ VertexArrayObject.prototype.draw = function (withMaterial) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
-  if (self._index) {
-    if (self._buffers.parts) {
-      self._buffers.parts.forEach(function (part) {
-        if (withMaterial) {
-          self._scene._sceneProgram.setUniforms({
-            u_texture: !!part.image
-          });
-          if (part.image) {
-            gl.cache.textures.get(part.image).bind(0);
-          } else {
-            gl.vertexAttrib4fv(attributesMap.color.index, part.color);
-          }
-        }
-        part.counts.forEach(function (item) {
-          gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
+  if (self._buffers.parts) {
+    self._buffers.parts.forEach(function (part) {
+      if (withMaterial) {
+        self._scene._sceneProgram.setUniforms({
+          u_texture: !!part.image
         });
+        if (part.image) {
+          gl.cache.textures.get(part.image).bind(0);
+        } else {
+          gl.vertexAttrib4fv(attributesMap.color.index, part.color);
+        }
+      }
+      part.counts.forEach(function (item) {
+        if (self._index) {
+          gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
+        } else {
+          gl.drawArrays(self._mode, item.offset, item.count);
+        }
       });
-    } else {
+    });
+  } else {
+    if (self._index) {
        // mode, count, type, offset
       gl.drawElements(self._mode, self._count, self._element_type, self._offset * self._element_size);
+    } else {
+      gl.drawArrays(self._mode, self._offset, self._count);
     }
-  } else {
-    gl.drawArrays(self._mode, self._offset, self._count);
   }
 };
 

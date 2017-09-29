@@ -87,7 +87,8 @@ function addData () {
   sphere.type = 'sphere';
   sphere.image = 'images/Earth_Diffuse.png';
   sphere.imageNormal = 'images/Earth_Normal.png';
-  sphere.setPosition(2, 0, 0);
+  sphere.setPosition(20, 0, 0);
+  sphere.setScale(10, 10, 10);
   scene.add(sphere);
 
   leftController = new wg.Object();

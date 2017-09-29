@@ -1,6 +1,6 @@
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
-  wg.geometries[name] = calculateTangent(geometry);
+  wg.geometries[name] = calculateBarycentric(calculateTangent(geometry));
 };
 
 var createCube = Util.createCube = function (side) {
@@ -209,12 +209,7 @@ function createTruncatedCone(
   };
 }
 
-addGeometry('cube', createCube(1));
-addGeometry('torus', createTorus(32, 32, 0.5, 1));
-addGeometry('sphere', createSphere(32, 32, 0.5));
-addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
-
-function calculateTangent (geometry) {
+var calculateTangent = Util.calculateTangent = function (geometry) {
   var indices = geometry.index,
     uvs = geometry.uv,
     vertices = geometry.position,
@@ -270,3 +265,43 @@ function calculateTangent (geometry) {
   }
   return geometry;
 }
+
+var calculateBarycentric = Util.calculateBarycentric = function (geometry) {
+  var indices = geometry.index,
+    uvs = geometry.uv,
+    vertices = geometry.position,
+    normals = geometry.normal,
+    tangents = geometry.tangent,
+    newUv = [],
+    newPosition = [],
+    newNormal = [],
+    newTangent = [],
+    barycentric = [];
+  for (var i = 0, n = indices.length; i < n; i++) {
+    var index = indices[i];
+    newUv.push(uvs[index * 2], uvs[index * 2 + 1]);
+    newPosition.push(vertices[index * 3], vertices[index * 3 + 1], vertices[index * 3 + 2]);
+    newNormal.push(normals[index * 3], normals[index * 3 + 1], normals[index * 3 + 2]);
+    newTangent.push(tangents[index * 3], tangents[index * 3 + 1], tangents[index * 3 + 2]);
+    if (i % 3 === 0) {
+      barycentric.push(1, 0, 0);
+    } else if (i % 3 === 1) {
+      barycentric.push(0, 1, 0);
+    } else {
+      barycentric.push(0, 0, 1);
+    }
+  }
+  return {
+    uv: newUv,
+    position: newPosition,
+    normal: newNormal,
+    tangent: newTangent,
+    barycentric: barycentric,
+    parts: geometry.parts
+  }
+};
+
+addGeometry('cube', createCube(1));
+addGeometry('torus', createTorus(32, 32, 0.5, 1));
+addGeometry('sphere', createSphere(32, 32, 0.5));
+addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));

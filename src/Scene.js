@@ -8,6 +8,7 @@ attribute vec3 a_normal;
 attribute vec2 a_uv;
 attribute vec4 a_color;
 attribute vec3 a_tangent;
+attribute vec3 a_barycentric;
 
 uniform mat4 u_modelViewProjectMatrix;
 uniform mat4 u_modelViewMatrix;
@@ -20,6 +21,8 @@ uniform vec3 u_lightPosition;
 varying vec3 v_normal;
 varying vec2 v_uv;
 varying vec4 v_color;
+varying vec3 v_barycentric;
+varying vec4 v_modelPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
 
@@ -29,6 +32,8 @@ void main () {
   v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv * u_textureScale;
   v_color = a_color;
+  v_barycentric = a_barycentric;
+  v_modelPosition = position;
 
   vec3 viewPosition = (u_modelViewMatrix * position).xyz;
   v_lightDirection = u_lightPosition - viewPosition;
@@ -48,38 +53,74 @@ void main () {
 }
 `;
 
-var FRAGMENT_SHADER_SCENE = `
+var FRAGMENT_SHADER_SCENE = `#extension GL_OES_standard_derivatives : enable
 #ifdef GL_ES
   precision highp float;
 #endif
+
 
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
 uniform bool u_texture;
 uniform bool u_normalMap;
+uniform bool u_wireframe;
+uniform bool u_wireframeOnly;
+uniform vec3 u_wireframeColor;
+uniform float u_wireframeWidth;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
 varying vec4 v_color;
+varying vec3 v_barycentric;
+varying vec4 v_modelPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
 
+float edgeFactor () {
+  vec3 d = fwidth(v_barycentric);
+  vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, v_barycentric);
+  return min(min(a3.x, a3.y), a3.z);
+}
+
+/*float edgeFactor (vec2 parameter) {
+  vec2 d = fwidth(parameter);
+  vec2 looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+  vec2 a2 = smoothstep(vec2(0.0), d * u_wireframeWidth, looped);
+  return min(a2.x, a2.y);
+}
+
+float edgeFactor (vec3 parameter) {
+  vec3 d = fwidth(parameter);
+  vec3 looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+  vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, looped);
+  return min(min(a3.x, a3.y), a3.z);
+}*/
+
 void main () {
-  vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normal);
-  vec3 lightDirection = normalize(v_lightDirection);
-  vec3 eyeDirection = normalize(v_eyeDirection);
-  float diffuse = max(dot(lightDirection, normal), 0.0);
+  if (u_wireframe && u_wireframeOnly) {
+    // gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor(v_modelPosition.xyz * 500.0)));
+    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
+  } else {
+    vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normal);
+    vec3 lightDirection = normalize(v_lightDirection);
+    vec3 eyeDirection = normalize(v_eyeDirection);
+    float diffuse = max(dot(lightDirection, normal), 0.0);
 
-  vec3 reflectDirection = reflect(-lightDirection, normal);
-  float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
+    vec3 reflectDirection = reflect(-lightDirection, normal);
+    float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
 
-  vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
-  vec3 ambientColor = u_ambientColor * color.rgb;
-  vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-  vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
-  gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+    vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
+    vec3 ambientColor = u_ambientColor * color.rgb;
+    vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
+    vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
+    gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+    if (u_wireframe) {
+      // gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor(v_modelPosition.xyz * 500.0));
+      gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor());
+    }
+  }
 }
 `;
 
@@ -130,6 +171,9 @@ var Scene = wg.Scene = function (canvas, options) {
   self._lightPosition = [10, 10, 10];
   self._ambientColor = [.3, .3, .3];
   self._clearColor = [0, 0, 0, 0];
+  self._wireframeColor = [69.0/255.0, 132.0/255.0, 206.0/255.0];
+  self._wireframeWidth = 1.0;
+  self._wireframeOnly = true;
   self._enableSSAO = false;
   self._clear = true;
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
@@ -140,6 +184,8 @@ var Scene = wg.Scene = function (canvas, options) {
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
+  // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
+  gl.getExtension('OES_standard_derivatives');
   // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
   var ext = gl.getExtension('EXT_texture_filter_anisotropic');
   if (ext) {
@@ -338,19 +384,64 @@ Scene.prototype.draw = function () {
     u_lightPosition: lightPosition,
     u_lightColor: self._lightColor,
     u_ambientColor: self._ambientColor,
+    u_wireframeColor: self._wireframeColor,
+    u_wireframeWidth: self._wireframeWidth,
+    u_wireframeOnly: self._wireframeOnly,
     u_samplerImage: 0,
     u_samplerNormal: 1,
   });
+
+  gl.disable(gl.BLEND);
+  gl.depthMask(true);
   self._objects.forEach(function (object) {
     if (object.visible === false) {
       return;
     }
+    if (!object.transparent) {
+      drawObject(object);
+    }
+  });
+
+  gl.enable(gl.BLEND);
+  gl.depthMask(false);
+  self._objects.forEach(function (object) {
+    if (object.visible === false) {
+      return;
+    }
+    if (object.transparent) {
+      drawObject(object);
+    }
+  });
+
+  gl.disable(gl.BLEND);
+  gl.depthMask(true);
+
+  self._outlineEffect.pass();
+
+  /*if (self._enableSSAO) {
+    self._ssaoEffect.pass(self._framebuffer);
+  } else {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    outputProgram.use();
+    if (clear !== false) {
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    }
+    self._framebuffer.bindTexture(0);
+    gl.cache.quadVao.draw();
+    // self._fxaaEffect.pass(self._framebuffer);
+  }*/
+
+  self._glowEffect.pass();
+
+  function drawObject (object) {
     var vao = self._getVertexArrayObject(object.type);
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
         u_normalMatrix: object._normalMatrix,
         u_texture: !!object.image,
+        u_wireframe: !!object.wireframe,
         u_textureScale: object.textureScale,
         u_normalMap: !!object.imageNormal,
         u_modelViewMatrix: object._modelViewMatrix,
@@ -372,25 +463,7 @@ Scene.prototype.draw = function () {
       }
       vao.draw(true);
     }
-  });
-
-  self._outlineEffect.pass();
-
-  /*if (self._enableSSAO) {
-    self._ssaoEffect.pass(self._framebuffer);
-  } else {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    outputProgram.use();
-    if (clear !== false) {
-      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    }
-    self._framebuffer.bindTexture(0);
-    gl.cache.quadVao.draw();
-    // self._fxaaEffect.pass(self._framebuffer);
-  }*/
-
-  self._glowEffect.pass();
+  }
 };
 
 Scene.prototype.add = function (object) {
@@ -551,6 +624,33 @@ Scene.prototype.getClearColor = function () {
 
 Scene.prototype.setClearColor = function (clearColor) {
   this._clearColor = clearColor;
+  this.redraw();
+};
+
+Scene.prototype.getWireframeColor = function () {
+  return this._wireframeColor;
+};
+
+Scene.prototype.setWireframeColor = function (wireframeColor) {
+  this._wireframeColor = wireframeColor;
+  this.redraw();
+};
+
+Scene.prototype.getWireframeWidth = function () {
+  return this._wireframeWidth;
+};
+
+Scene.prototype.setWireframeWidth = function (wireframeWidth) {
+  this._wireframeWidth = wireframeWidth;
+  this.redraw();
+};
+
+Scene.prototype.getWireframeOnly = function () {
+  return this._wireframeOnly;
+};
+
+Scene.prototype.setWireframeOnly = function (wireframeOnly) {
+  this._wireframeOnly = wireframeOnly;
   this.redraw();
 };
 

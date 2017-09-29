@@ -5,6 +5,7 @@ var attributesMap = {
   color: { index: 3, size: 4 },
   tangent: { index: 4, size: 3 },
   bitangent: { index: 5, size: 3 },
+  barycentric: { index: 6, size: 3 },
 };
 
 var Program = wg.Program = function (gl, options) {
