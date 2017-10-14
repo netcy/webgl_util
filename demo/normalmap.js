@@ -1,8 +1,8 @@
 'use strict';
 
 var scene, leftController, rightController, leftRay, rightRay,
-  leftGamePadPosition = vec3.create(),
-  rightGamePadPosition = vec3.create(),
+  leftGamepadPosition = vec3.create(),
+  rightGamepadPosition = vec3.create(),
   currentRayPosition = vec3.create(),
   rayScale = vec3.fromValues(0.05, 1, 0.05),
   rayOffset = vec3.fromValues(0, 0.5, -0.8);
@@ -19,7 +19,7 @@ function init () {
     wg.Util.addGeometry('vive', obj);
     scene.redraw();
   });
-  scene.onGamepadRender = onGamepadRender;
+  scene.onGamepadChanged = onGamepadChanged;
   var count = 0;
   scene.onAnimationFrame = function () {
     /*count++;
@@ -30,12 +30,12 @@ function init () {
   createGUI(scene);
 }
 
-function onGamepadRender (leftGamePad, rightGamePad, pressedGamePad) {
+function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad) {
   var cameraPosition = scene.getCamera().getPosition(),
     currentRay;
-  if (pressedGamePad) {
-    leftRay.visible = pressedGamePad === leftGamePad;
-    rightRay.visible = pressedGamePad === rightGamePad;
+  if (pressedGamepad) {
+    leftRay.visible = pressedGamepad === leftGamepad;
+    rightRay.visible = pressedGamepad === rightGamepad;
     currentRay = leftRay.visible ? leftRay : rightRay;
   } else {
     leftRay.visible = false;
@@ -43,23 +43,23 @@ function onGamepadRender (leftGamePad, rightGamePad, pressedGamePad) {
   }
 
   // set gamepad position and rotation
-  if (leftGamePad) {
-    vec3.add(leftGamePadPosition, leftGamePad.pose.position, cameraPosition);
-    leftController.fromRotationTranslation(leftGamePad.pose.orientation, leftGamePadPosition);
+  if (leftGamepad) {
+    vec3.add(leftGamepadPosition, leftGamepad.pose.position, cameraPosition);
+    leftController.fromRotationTranslation(leftGamepad.pose.orientation, leftGamepadPosition);
     leftController.visible = true;
   } else {
     leftController.visible = false;
   }
-  if (rightGamePad) {
-    vec3.add(rightGamePadPosition, rightGamePad.pose.position, cameraPosition);
-    rightController.fromRotationTranslation(rightGamePad.pose.orientation, rightGamePadPosition);
+  if (rightGamepad) {
+    vec3.add(rightGamepadPosition, rightGamepad.pose.position, cameraPosition);
+    rightController.fromRotationTranslation(rightGamepad.pose.orientation, rightGamepadPosition);
     rightController.visible = true;
   } else {
     rightController.visible = false;
   }
-  if (pressedGamePad) {
-    vec3.add(currentRayPosition, pressedGamePad.pose.position, cameraPosition);
-    currentRay.fromRotationTranslation(pressedGamePad.pose.orientation, currentRayPosition);
+  if (pressedGamepad) {
+    vec3.add(currentRayPosition, pressedGamepad.pose.position, cameraPosition);
+    currentRay.fromRotationTranslation(pressedGamepad.pose.orientation, currentRayPosition);
     mat4.rotateX(currentRay._modelMatrix, currentRay._modelMatrix, -Math.PI * 0.5);
     mat4.scale(currentRay._modelMatrix, currentRay._modelMatrix, rayScale);
     mat4.translate(currentRay._modelMatrix, currentRay._modelMatrix, rayOffset);

@@ -69,6 +69,7 @@ uniform vec3 u_wireframeColor;
 uniform float u_wireframeWidth;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
+uniform bool u_light;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
@@ -112,10 +113,14 @@ void main () {
     float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
 
     vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
-    vec3 ambientColor = u_ambientColor * color.rgb;
-    vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-    vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
-    gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+    if (u_light) {
+      vec3 ambientColor = u_ambientColor * color.rgb;
+      vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
+      vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
+      gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+    } else {
+      gl_FragColor = color;
+    }
     if (u_wireframe) {
       // gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor(v_modelPosition.xyz * 500.0));
       gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor());
@@ -218,7 +223,7 @@ var Scene = wg.Scene = function (canvas, options) {
     }
     gl.cache = { textures: new TextureCache(gl) };
     gl.cache.textures.trigger.on('load', self._handleImageLoaded, self);
-    gl.cache.quadVao = new VertexArrayObject(self, {
+    gl.cache.quadVao = new VertexArrayObject(gl, {
       buffers: {
         position: [
           1.0, 1.0, 0.0,
@@ -264,7 +269,7 @@ var Scene = wg.Scene = function (canvas, options) {
     self._glowEffect = new GlowEffect(self);
     self._ssaoEffect = new SSAOEffect(self);
 
-    // self._fxaaEffect = new FxaaEffect(self);
+    // self._fxaaEffect = new FxaaEffect(gl);
     // self._fxaaEffect.setEnabled(true);
 
     var step = vec3.fromValues(0, 0, -0.01),
@@ -272,7 +277,7 @@ var Scene = wg.Scene = function (canvas, options) {
       tranMat = mat4.create(),
       viewMatrix = mat4.create(),
       cameraPosition = self._camera._position,
-      leftGamePad, rightGamePad, pressedGamePad;
+      leftGamepad, rightGamepad, pressedGamepad, buttonIndex;
     (function render (time) {
       var vrDisplay = self._vrDisplay,
         frameData = self._frameData,
@@ -284,11 +289,11 @@ var Scene = wg.Scene = function (canvas, options) {
       if (vrDisplay && vrDisplay.isPresenting) {
         vrDisplay.getFrameData(frameData);
         getVRGamepads();
-        if (pressedGamePad) {
-          vec3.transformQuat(stepTrans, step, pressedGamePad.pose.orientation);
+        if (pressedGamepad && buttonIndex === 2) {
+          vec3.transformQuat(stepTrans, step, pressedGamepad.pose.orientation);
           vec3.add(cameraPosition, cameraPosition, stepTrans);
         }
-        self.onGamepadRender(leftGamePad, rightGamePad, pressedGamePad);
+        self.onGamepadChanged(leftGamepad, rightGamepad, pressedGamepad, buttonIndex);
 
         mat4.fromTranslation(tranMat, cameraPosition);
         mat4.invert(tranMat, tranMat);
@@ -322,21 +327,24 @@ var Scene = wg.Scene = function (canvas, options) {
     })(0);
 
     function getVRGamepads() {
-      leftGamePad = null;
-      rightGamePad = null;
-      pressedGamePad = null;
+      leftGamepad = null;
+      rightGamepad = null;
+      pressedGamepad = null;
+      buttonIndex = -1;
       var gamepads = navigator.getGamepads();
       for (var i=0; i<gamepads.length; i++) {
         var gamepad = gamepads[i];
         if (gamepad && gamepad.pose) {
           if (gamepad.hand === 'right') {
-            rightGamePad = gamepad;
+            rightGamepad = gamepad;
           } else {
-            leftGamePad = gamepad;
+            leftGamepad = gamepad;
           }
-          gamepad.buttons.some(function (button) {
+          // direction: 0, trigger: 1, side: 2, menu: 3
+          gamepad.buttons.some(function (button, index) {
             if (button.pressed) {
-              pressedGamePad = gamepad;
+              pressedGamepad = gamepad;
+              buttonIndex = index;
               return true;
             }
           });
@@ -349,7 +357,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._initVR();
 };
 
-Scene.prototype.onGamepadRender = function () {
+Scene.prototype.onGamepadChanged = function (leftGamepad, rightGamepad, pressedGamepad, buttonIndex) {
 };
 
 Scene.prototype.onAnimationFrame = function () {
@@ -435,7 +443,7 @@ Scene.prototype.draw = function () {
   self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self._getVertexArrayObject(object.type);
+    var vao = self.getVertexArrayObject(object);
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
@@ -446,6 +454,7 @@ Scene.prototype.draw = function () {
         u_normalMap: !!object.imageNormal,
         u_modelViewMatrix: object._modelViewMatrix,
         u_modelViewProjectMatrix: object._modelViewProjectMatrix,
+        u_light: object.light !== false,
       });
       if (object.image) {
         gl.cache.textures.get(object.image).bind(0);
@@ -461,7 +470,18 @@ Scene.prototype.draw = function () {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
       }
-      vao.draw(true);
+      vao.draw(preDrawCallback);
+    }
+  }
+
+  function preDrawCallback (part) {
+    sceneProgram.setUniforms({
+      u_texture: !!part.image
+    });
+    if (part.image) {
+      gl.cache.textures.get(part.image).bind(0);
+    } else {
+      gl.vertexAttrib4fv(attributesMap.color.index, part.color);
     }
   }
 };
@@ -478,13 +498,17 @@ Scene.prototype.clear = function () {
   self._dirty = true;
 };
 
-Scene.prototype._getVertexArrayObject = function (type) {
+Scene.prototype.getVertexArrayObject = function (object) {
   var self = this,
     gl = self._gl,
+    type = object.type,
     geometry = wg.geometries[type],
     vao = gl.cache.vaos[type];
+  if (object.vao) {
+    return object.vao;
+  }
   if (geometry && !vao) {
-    vao = gl.cache.vaos[type] = new VertexArrayObject(self, {
+    vao = gl.cache.vaos[type] = new VertexArrayObject(gl, {
       buffers: geometry
     });
   }

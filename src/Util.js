@@ -22,6 +22,43 @@ function isPowerOfTwo(x) {
   return (x & (x - 1)) === 0;
 }
 
+Util.initWebGL = function (canvas, options, callback) {
+  var gl = canvas.getContext('webgl', options || {
+    preserveDrawingBuffer: true,
+    antialias: false,
+    stencil: true
+  });
+  addVertexArrayObjectSupport(gl);
+  // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
+  gl.getExtension('OES_standard_derivatives');
+  // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
+  var ext = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (ext) {
+    gl._anisotropicExt = ext;
+    gl._max_anisotropy = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+  }
+
+  gl.initingTextures = {};
+  // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
+  canvas.addEventListener('webglcontextlost', function (e) {
+    console.log(e);
+    e.preventDefault();
+    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Deal_with_outstanding_asynchronous_requests
+    var imageUrls = Object.keys(gl.initingTextures);
+    imageUrls.forEach(function (imageUrl) {
+      gl.initingTextures[imageUrl].onload = null;
+    });
+    gl.initingTextures = {};
+    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Turn_off_your_rendering_loop_on_lost_context
+    gl._aniamtionId && (gl._vrDisplay || window).cancelAnimationFrame(gl._aniamtionId);
+  });
+  canvas.addEventListener('webglcontextrestored', function (e) {
+    console.log(e);
+    callback(gl);
+  });
+  callback(gl);
+};
+
 var getPowerOfTwoImage = Util.getPowerOfTwoImage = function (image) {
   if (isPowerOfTwo(image.width) && isPowerOfTwo(image.height)) {
     return image;

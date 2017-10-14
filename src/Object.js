@@ -36,24 +36,18 @@ wg.Object.prototype.setRotation = function (x, y, z) {
   return self;
 };
 
-wg.Object.prototype._calculateMatrix = function () {
-  var self = this;
+wg.Object.prototype.getModelMatrix = function () {
+  var self = this,
+    modelMatrix = self._modelMatrix;
   if (self._matrixDirty) {
     self._matrixDirty = false;
-    mat4.fromTranslation(self._modelMatrix, self._position);
-    mat4.rotateX(self._modelMatrix, self._modelMatrix, self._rotation[0]);
-    mat4.rotateY(self._modelMatrix, self._modelMatrix, self._rotation[1]);
-    mat4.rotateZ(self._modelMatrix, self._modelMatrix, self._rotation[2]);
-    mat4.scale(self._modelMatrix, self._modelMatrix, self._scale);
+    mat4.fromTranslation(modelMatrix, self._position);
+    mat4.rotateX(modelMatrix, modelMatrix, self._rotation[0]);
+    mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
+    mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
+    mat4.scale(modelMatrix, modelMatrix, self._scale);
   }
-};
-
-wg.Object.prototype.getModelMatrix = function () {
-  var self = this;
-  if (self._matrixDirty) {
-    self._calculateMatrix();
-  }
-  return self._modelMatrix;
+  return modelMatrix;
 };
 
 wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {

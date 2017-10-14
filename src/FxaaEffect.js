@@ -103,12 +103,10 @@ void main() {
 }
 `;
 
-var FxaaEffect = wg.FxaaEffect = function (scene) {
-  var self = this,
-    gl;
+var FxaaEffect = wg.FxaaEffect = function (gl) {
+  var self = this;
 
-  self._scene = scene;
-  gl = self._gl = scene._gl;
+  self._gl = gl;
   self._enabled = false;
 
   self._program = new Program(gl, {

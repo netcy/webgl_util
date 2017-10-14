@@ -1,20 +1,19 @@
 /**
  * VertexArrayObject
- * @param {[Scene]} scene Scene
+ * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
  *     buffers: { position: [], normal: [], uv: [], color: [], index: [] },
  *     offset: 0,
  *     mode: 'TRIANGLES'
  */
-var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
+var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
   var self = this,
-    buffers = options.buffers,
-    gl;
+    buffers = options.buffers;
 
-  self._scene = scene;
-  gl = self._gl = scene._gl;
+  self._gl = gl;
   self._vao = gl.createVertexArray();
+  self._bufferMap = {};
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
@@ -24,6 +23,7 @@ var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
     }
     var buffer = buffers[attrName];
     var bufferObject = gl.createBuffer();
+    self._bufferMap[attrName] = bufferObject;
     var element_type, element_size, array;
 
     if (attrName === 'position') {
@@ -73,22 +73,21 @@ var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
   self._buffers = options.buffers;
 };
 
-VertexArrayObject.prototype.draw = function (withMaterial) {
+VertexArrayObject.prototype.setPosition = function (position) {
+  var self = this,
+    gl = self._gl;
+  gl.bindVertexArray(self._vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, self._bufferMap['position']);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(position), gl.STATIC_DRAW);
+};
+
+VertexArrayObject.prototype.draw = function (preDrawCallback) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
   if (self._buffers.parts) {
     self._buffers.parts.forEach(function (part) {
-      if (withMaterial) {
-        self._scene._sceneProgram.setUniforms({
-          u_texture: !!part.image
-        });
-        if (part.image) {
-          gl.cache.textures.get(part.image).bind(0);
-        } else {
-          gl.vertexAttrib4fv(attributesMap.color.index, part.color);
-        }
-      }
+      preDrawCallback && preDrawCallback(part);
       part.counts.forEach(function (item) {
         if (self._index) {
           gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
@@ -111,4 +110,5 @@ VertexArrayObject.prototype.dispose = function () {
   var self = this;
   self._gl.deleteVertexArray(self._vao);
   self._vao = null;
+  self._bufferMap = {};
 };

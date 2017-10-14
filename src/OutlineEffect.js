@@ -88,17 +88,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/colorMask
   gl.colorMask(false, false, false, false);
 
-  scene._objects.forEach(function (object) {
-    if (object.outline) {
-      var vao = gl.cache.vaos[object.type];
-      if (vao) {
-        program.setUniforms({
-          u_modelMatrix: object.getModelMatrix()
-        });
-        vao.draw();
-      }
-    }
-  });
+  drawOutline();
 
   program.setUniforms({
     u_outline: true
@@ -108,17 +98,24 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
   gl.colorMask(true, true, true, true);
 
-  scene._objects.forEach(function (object) {
-    if (object.outline) {
-      var vao = gl.cache.vaos[object.type];
-      if (vao) {
-        program.setUniforms({
-          u_modelMatrix: object.getModelMatrix()
-        });
-        vao.draw();
+  drawOutline();
+
+  function drawOutline () {
+    scene._objects.forEach(function (object) {
+      if (object.visible === false) {
+        return;
       }
-    }
-  });
+      if (object.outline) {
+        var vao = scene.getVertexArrayObject(object);
+        if (vao) {
+          program.setUniforms({
+            u_modelMatrix: object.getModelMatrix()
+          });
+          vao.draw();
+        }
+      }
+    });
+  }
 
   gl.disable(gl.STENCIL_TEST);
 };

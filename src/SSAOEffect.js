@@ -252,7 +252,10 @@ SSAOEffect.prototype._draw = function (program) {
   var self = this,
     gl = self._gl;
   self._scene._objects.forEach(function (object) {
-    var vao = gl.cache.vaos[object.type];
+    if (object.visible === false) {
+      return;
+    }
+    var vao = scene.getVertexArrayObject(object);
     if (vao) {
       if (!object._viewNormalMatrix) {
         object._viewNormalMatrix = mat3.create();

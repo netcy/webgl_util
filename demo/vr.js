@@ -1,9 +1,9 @@
 'use strict';
 
-var scene, leftController, rightController, leftRay, rightRay,
-  leftGamePadPosition = vec3.create(),
-  rightGamePadPosition = vec3.create(),
-  currentRayPosition = vec3.create(),
+var scene, leftController, rightController, selectRay, jumpRay,
+  rayPositionStart = vec3.create(),
+  rayPositionMiddle = vec3.create(),
+  rayPositionEnd = vec3.create(),
   rayScale = vec3.fromValues(0.05, 1, 0.05),
   rayOffset = vec3.fromValues(0, 0.5, -0.8);
 
@@ -18,44 +18,52 @@ function init () {
     wg.Util.addGeometry('vive', obj);
     scene.redraw();
   });
-  scene.onGamepadRender = onGamepadRender;
+  scene.onGamepadChanged = onGamepadChanged;
   addData();
   createGUI(scene);
 }
 
-function onGamepadRender (leftGamePad, rightGamePad, pressedGamePad) {
-  var cameraPosition = scene.getCamera().getPosition(),
-    currentRay;
-  if (pressedGamePad) {
-    leftRay.visible = pressedGamePad === leftGamePad;
-    rightRay.visible = pressedGamePad === rightGamePad;
-    currentRay = leftRay.visible ? leftRay : rightRay;
-  } else {
-    leftRay.visible = false;
-    rightRay.visible = false;
-  }
+function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonIndex) {
+  selectRay.visible = false;
+  jumpRay.visible = false;
 
   // set gamepad position and rotation
-  if (leftGamePad) {
-    vec3.add(leftGamePadPosition, leftGamePad.pose.position, cameraPosition);
-    leftController.fromRotationTranslation(leftGamePad.pose.orientation, leftGamePadPosition);
-    leftController.visible = true;
-  } else {
-    leftController.visible = false;
+  refreshController(leftController, leftGamepad);
+  refreshController(rightController, rightGamepad);
+  if (pressedGamepad) {
+    // direction: 0, trigger: 1, side: 2, menu: 3
+    if (buttonIndex === 0) {
+      jumpRay.visible = true;
+      vec3.add(rayPositionStart, pressedGamepad.pose.position, scene._camera._position);
+      vec3.set(rayPositionMiddle, 0, 0, -1);
+      vec3.set(rayPositionEnd, 0, 0, -4);
+      vec3.transformQuat(rayPositionMiddle, rayPositionMiddle, pressedGamepad.pose.orientation);
+      vec3.add(rayPositionMiddle, rayPositionMiddle, rayPositionStart);
+      vec3.transformQuat(rayPositionEnd, rayPositionEnd, pressedGamepad.pose.orientation);
+      vec3.add(rayPositionEnd, rayPositionEnd, rayPositionStart);
+      var jumpRayPosition = [
+        rayPositionStart[0], rayPositionStart[1], rayPositionStart[2],
+        rayPositionMiddle[0], Math.max(rayPositionMiddle[1], 0), rayPositionMiddle[2],
+        rayPositionEnd[0], 0, rayPositionEnd[2]
+      ];
+      jumpRay.vao.setPosition(jumpRayPosition);
+    } else if (buttonIndex === 1) {
+      refreshController(selectRay, pressedGamepad);
+      var modelMatrix = selectRay._modelMatrix;
+      mat4.rotateX(modelMatrix, modelMatrix, -Math.PI * 0.5);
+      mat4.scale(modelMatrix, modelMatrix, rayScale);
+      mat4.translate(modelMatrix, modelMatrix, rayOffset);
+    }
   }
-  if (rightGamePad) {
-    vec3.add(rightGamePadPosition, rightGamePad.pose.position, cameraPosition);
-    rightController.fromRotationTranslation(rightGamePad.pose.orientation, rightGamePadPosition);
-    rightController.visible = true;
+}
+
+function refreshController (object, gampad) {
+  if (gampad) {
+    vec3.add(object._position, gampad.pose.position, scene._camera._position);
+    object.fromRotationTranslation(gampad.pose.orientation, object._position);
+    object.visible = true;
   } else {
-    rightController.visible = false;
-  }
-  if (pressedGamePad) {
-    vec3.add(currentRayPosition, pressedGamePad.pose.position, cameraPosition);
-    currentRay.fromRotationTranslation(pressedGamePad.pose.orientation, currentRayPosition);
-    mat4.rotateX(currentRay._modelMatrix, currentRay._modelMatrix, -Math.PI * 0.5);
-    mat4.scale(currentRay._modelMatrix, currentRay._modelMatrix, rayScale);
-    mat4.translate(currentRay._modelMatrix, currentRay._modelMatrix, rayOffset);
+    object.visible = false;
   }
 }
 
@@ -85,17 +93,55 @@ function addData () {
   rightController.type = 'vive';
   scene.add(rightController);
 
-  leftRay = new wg.Object();
-  leftRay.visible = false;
-  leftRay.glow = true;
-  leftRay.type = 'cone';
-  leftRay.color = [1, 153/255, 51/255, 1];
-  scene.add(leftRay);
+  selectRay = new wg.Object();
+  selectRay.visible = false;
+  selectRay.glow = true;
+  selectRay.type = 'cone';
+  selectRay.color = [1, 153/255, 51/255, 1];
+  scene.add(selectRay);
 
-  rightRay = new wg.Object();
-  rightRay.visible = false;
-  rightRay.glow = true;
-  rightRay.type = 'cone';
-  rightRay.color = [1, 153/255, 51/255, 1];
-  scene.add(rightRay);
+  jumpRay = new wg.Object();
+  jumpRay.visible = false;
+  jumpRay.light = false;
+  jumpRay.color = [1, 153/255, 51/255, 1];
+  jumpRay.vao = new wg.VertexArrayObject(scene._gl, {
+    buffers: {
+      position: [
+        0, 0, 0,
+        0, 0, 0,
+        0, 0, 0
+      ],
+      index: [
+        0, 1, 1, 2
+      ],
+      color: [
+        1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1
+      ]
+    },
+    mode: 'LINES'
+  });
+  scene.add(jumpRay);
+
+  var line = new wg.Object();
+  line.color = [1, 0, 0, 1];
+  line.light = false;
+  line.vao = new wg.VertexArrayObject(scene._gl, {
+    buffers: {
+      position: [
+        -0.5,  0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5, // top
+        -0.5, -0.5, -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5, -0.5, -0.5, // bottom
+      ],
+      index: [
+        0, 1,  1, 2,  2, 3,  3, 0,
+        4, 5,  5, 6,  6, 7,  7, 4,
+        0, 4,  1, 5,  2, 6,  3, 7
+      ],
+      color: [
+        0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
+        0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1
+      ]
+    },
+    mode: 'LINES'
+  });
+  scene.add(line);
 }

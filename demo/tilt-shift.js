@@ -48,6 +48,22 @@ function init() {
 
 function initWebGL(gl) {
   window.gl = gl;
+  gl.cache = { textures: new wg.TextureCache(gl) };
+  gl.cache.textures.trigger.on('load', function () {
+    dirty = true;
+  });
+  gl.cache.quadVao = new wg.VertexArrayObject(gl, {
+    buffers: {
+      position: [
+        1.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        1.0, -1.0, 0.0,
+        1.0, 1.0, 0.0
+      ]
+    }
+  });
   gl.enable(gl.CULL_FACE);
   // gl.frontFace(gl.CCW);
   gl.enable(gl.DEPTH_TEST);
@@ -64,10 +80,7 @@ function initWebGL(gl) {
     fragment: FRAGMENT_SHADER_SOURCE
   });
   imageTexture = new wg.Texture(gl, {
-    url: 'images/scene.jpeg',
-    callback: function () {
-      dirty = true;
-    }
+    url: 'images/scene.jpeg'
   });
   normalFramebuffer = new wg.Framebuffer(gl, {
     width: gl.canvas.width,
@@ -77,7 +90,7 @@ function initWebGL(gl) {
   });
 
   (function render() {
-    gl.aniamtionId = requestAnimationFrame(render);
+    gl._aniamtionId = requestAnimationFrame(render);
     if (dirty) {
       draw(gl);
     }
@@ -86,7 +99,7 @@ function initWebGL(gl) {
 
 var renderType = 'Normal';
 var tiltShiftType = 0;
-var fxaaEnabled = true;
+var fxaaEnabled = false;
 
 function draw(gl) {
   if (!dirty) {

@@ -1,4 +1,4 @@
-var TextureCache = function (gl) {
+var TextureCache = wg.TextureCache = function (gl) {
   var self = this;
   self.gl = gl;
   self.cache = {};

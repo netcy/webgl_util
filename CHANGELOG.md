@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.12.0] - 2017-10-13
+### Added
+- VertexArrayObject#setPosition
+- Object#light
+
+### Changed
+- WebVR: side button to move, trigger to select, top button to jump
+- VertexArrayObject#draw(preDrawCallback)
+- VertexArrayObject(gl, options)
+- Scene#onGamepadChanged(leftGamepad, rightGamepad, pressedGamepad, buttonIndex)
+
+
 ## [0.11.0] - 2017-09-29
 ### Added
 - transparent

@@ -25,6 +25,43 @@ function isPowerOfTwo(x) {
   return (x & (x - 1)) === 0;
 }
 
+Util.initWebGL = function (canvas, options, callback) {
+  var gl = canvas.getContext('webgl', options || {
+    preserveDrawingBuffer: true,
+    antialias: false,
+    stencil: true
+  });
+  addVertexArrayObjectSupport(gl);
+  // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
+  gl.getExtension('OES_standard_derivatives');
+  // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
+  var ext = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (ext) {
+    gl._anisotropicExt = ext;
+    gl._max_anisotropy = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+  }
+
+  gl.initingTextures = {};
+  // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Lost_Context_in_WebGL
+  canvas.addEventListener('webglcontextlost', function (e) {
+    console.log(e);
+    e.preventDefault();
+    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Deal_with_outstanding_asynchronous_requests
+    var imageUrls = Object.keys(gl.initingTextures);
+    imageUrls.forEach(function (imageUrl) {
+      gl.initingTextures[imageUrl].onload = null;
+    });
+    gl.initingTextures = {};
+    // https://www.khronos.org/webgl/wiki/HandlingContextLost#Turn_off_your_rendering_loop_on_lost_context
+    gl._aniamtionId && (gl._vrDisplay || window).cancelAnimationFrame(gl._aniamtionId);
+  });
+  canvas.addEventListener('webglcontextrestored', function (e) {
+    console.log(e);
+    callback(gl);
+  });
+  callback(gl);
+};
+
 var getPowerOfTwoImage = Util.getPowerOfTwoImage = function (image) {
   if (isPowerOfTwo(image.width) && isPowerOfTwo(image.height)) {
     return image;
@@ -222,12 +259,12 @@ var addGeometry = Util.addGeometry = function (name, geometry) {
 var createCube = Util.createCube = function (side) {
   var hs = side * 0.5;
   var pos = [
-    -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,  hs,
-    -hs, -hs, -hs, -hs,  hs, -hs,  hs,  hs, -hs,  hs, -hs, -hs,
-    -hs,  hs, -hs, -hs,  hs,  hs,  hs,  hs,  hs,  hs,  hs, -hs,
-    -hs, -hs, -hs,  hs, -hs, -hs,  hs, -hs,  hs, -hs, -hs,  hs,
-     hs, -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,
-    -hs, -hs, -hs, -hs, -hs,  hs, -hs,  hs,  hs, -hs,  hs, -hs
+    -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs,  hs, // front
+    -hs, -hs, -hs, -hs,  hs, -hs,  hs,  hs, -hs,  hs, -hs, -hs, // back
+    -hs,  hs, -hs, -hs,  hs,  hs,  hs,  hs,  hs,  hs,  hs, -hs, // top
+    -hs, -hs, -hs,  hs, -hs, -hs,  hs, -hs,  hs, -hs, -hs,  hs, // bottom
+     hs, -hs, -hs,  hs,  hs, -hs,  hs,  hs,  hs,  hs, -hs,  hs, // right
+    -hs, -hs, -hs, -hs, -hs,  hs, -hs,  hs,  hs, -hs,  hs, -hs  // left
   ];
   var nor = [
     -1.0, -1.0,  1.0,  1.0, -1.0,  1.0,  1.0,  1.0,  1.0, -1.0,  1.0,  1.0,
@@ -967,7 +1004,7 @@ Texture.prototype.dispose = function () {
 };
 
 // Source: src/TextureCache.js
-var TextureCache = function (gl) {
+var TextureCache = wg.TextureCache = function (gl) {
   var self = this;
   self.gl = gl;
   self.cache = {};
@@ -991,21 +1028,20 @@ TextureCache.prototype.get = function (url) {
 // Source: src/VertexArrayObject.js
 /**
  * VertexArrayObject
- * @param {[Scene]} scene Scene
+ * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
  *     buffers: { position: [], normal: [], uv: [], color: [], index: [] },
  *     offset: 0,
  *     mode: 'TRIANGLES'
  */
-var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
+var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
   var self = this,
-    buffers = options.buffers,
-    gl;
+    buffers = options.buffers;
 
-  self._scene = scene;
-  gl = self._gl = scene._gl;
+  self._gl = gl;
   self._vao = gl.createVertexArray();
+  self._bufferMap = {};
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
@@ -1015,6 +1051,7 @@ var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
     }
     var buffer = buffers[attrName];
     var bufferObject = gl.createBuffer();
+    self._bufferMap[attrName] = bufferObject;
     var element_type, element_size, array;
 
     if (attrName === 'position') {
@@ -1064,22 +1101,21 @@ var VertexArrayObject = wg.VertexArrayObject = function (scene, options) {
   self._buffers = options.buffers;
 };
 
-VertexArrayObject.prototype.draw = function (withMaterial) {
+VertexArrayObject.prototype.setPosition = function (position) {
+  var self = this,
+    gl = self._gl;
+  gl.bindVertexArray(self._vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, self._bufferMap['position']);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(position), gl.STATIC_DRAW);
+};
+
+VertexArrayObject.prototype.draw = function (preDrawCallback) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
   if (self._buffers.parts) {
     self._buffers.parts.forEach(function (part) {
-      if (withMaterial) {
-        self._scene._sceneProgram.setUniforms({
-          u_texture: !!part.image
-        });
-        if (part.image) {
-          gl.cache.textures.get(part.image).bind(0);
-        } else {
-          gl.vertexAttrib4fv(attributesMap.color.index, part.color);
-        }
-      }
+      preDrawCallback && preDrawCallback(part);
       part.counts.forEach(function (item) {
         if (self._index) {
           gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
@@ -1102,6 +1138,7 @@ VertexArrayObject.prototype.dispose = function () {
   var self = this;
   self._gl.deleteVertexArray(self._vao);
   self._vao = null;
+  self._bufferMap = {};
 };
 
 // Source: src/Effect.js
@@ -1224,12 +1261,10 @@ void main() {
 }
 `;
 
-var FxaaEffect = wg.FxaaEffect = function (scene) {
-  var self = this,
-    gl;
+var FxaaEffect = wg.FxaaEffect = function (gl) {
+  var self = this;
 
-  self._scene = scene;
-  gl = self._gl = scene._gl;
+  self._gl = gl;
   self._enabled = false;
 
   self._program = new Program(gl, {
@@ -1737,17 +1772,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/colorMask
   gl.colorMask(false, false, false, false);
 
-  scene._objects.forEach(function (object) {
-    if (object.outline) {
-      var vao = gl.cache.vaos[object.type];
-      if (vao) {
-        program.setUniforms({
-          u_modelMatrix: object.getModelMatrix()
-        });
-        vao.draw();
-      }
-    }
-  });
+  drawOutline();
 
   program.setUniforms({
     u_outline: true
@@ -1757,17 +1782,24 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
   gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
   gl.colorMask(true, true, true, true);
 
-  scene._objects.forEach(function (object) {
-    if (object.outline) {
-      var vao = gl.cache.vaos[object.type];
-      if (vao) {
-        program.setUniforms({
-          u_modelMatrix: object.getModelMatrix()
-        });
-        vao.draw();
+  drawOutline();
+
+  function drawOutline () {
+    scene._objects.forEach(function (object) {
+      if (object.visible === false) {
+        return;
       }
-    }
-  });
+      if (object.outline) {
+        var vao = scene.getVertexArrayObject(object);
+        if (vao) {
+          program.setUniforms({
+            u_modelMatrix: object.getModelMatrix()
+          });
+          vao.draw();
+        }
+      }
+    });
+  }
 
   gl.disable(gl.STENCIL_TEST);
 };
@@ -2077,7 +2109,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         return;
       }
       if (!object.glow) {
-        var vao = gl.cache.vaos[object.type];
+        var vao = scene.getVertexArrayObject(object);
         if (vao) {
           self._colorProgram.setUniforms({
             u_modelMatrix: object.getModelMatrix()
@@ -2106,7 +2138,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         return;
       }
       if (object.glow) {
-        var vao = gl.cache.vaos[object.type];
+        var vao = scene.getVertexArrayObject(object);
         if (vao) {
           self._colorProgram.setUniforms({
             u_modelMatrix: object.getModelMatrix()
@@ -2430,7 +2462,10 @@ SSAOEffect.prototype._draw = function (program) {
   var self = this,
     gl = self._gl;
   self._scene._objects.forEach(function (object) {
-    var vao = gl.cache.vaos[object.type];
+    if (object.visible === false) {
+      return;
+    }
+    var vao = scene.getVertexArrayObject(object);
     if (vao) {
       if (!object._viewNormalMatrix) {
         object._viewNormalMatrix = mat3.create();
@@ -2881,6 +2916,7 @@ uniform vec3 u_wireframeColor;
 uniform float u_wireframeWidth;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
+uniform bool u_light;
 
 varying vec3 v_normal;
 varying vec2 v_uv;
@@ -2924,10 +2960,14 @@ void main () {
     float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
 
     vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
-    vec3 ambientColor = u_ambientColor * color.rgb;
-    vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-    vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
-    gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+    if (u_light) {
+      vec3 ambientColor = u_ambientColor * color.rgb;
+      vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
+      vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
+      gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+    } else {
+      gl_FragColor = color;
+    }
     if (u_wireframe) {
       // gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor(v_modelPosition.xyz * 500.0));
       gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor());
@@ -3030,7 +3070,7 @@ var Scene = wg.Scene = function (canvas, options) {
     }
     gl.cache = { textures: new TextureCache(gl) };
     gl.cache.textures.trigger.on('load', self._handleImageLoaded, self);
-    gl.cache.quadVao = new VertexArrayObject(self, {
+    gl.cache.quadVao = new VertexArrayObject(gl, {
       buffers: {
         position: [
           1.0, 1.0, 0.0,
@@ -3076,7 +3116,7 @@ var Scene = wg.Scene = function (canvas, options) {
     self._glowEffect = new GlowEffect(self);
     self._ssaoEffect = new SSAOEffect(self);
 
-    // self._fxaaEffect = new FxaaEffect(self);
+    // self._fxaaEffect = new FxaaEffect(gl);
     // self._fxaaEffect.setEnabled(true);
 
     var step = vec3.fromValues(0, 0, -0.01),
@@ -3084,7 +3124,7 @@ var Scene = wg.Scene = function (canvas, options) {
       tranMat = mat4.create(),
       viewMatrix = mat4.create(),
       cameraPosition = self._camera._position,
-      leftGamePad, rightGamePad, pressedGamePad;
+      leftGamepad, rightGamepad, pressedGamepad, buttonIndex;
     (function render (time) {
       var vrDisplay = self._vrDisplay,
         frameData = self._frameData,
@@ -3096,11 +3136,11 @@ var Scene = wg.Scene = function (canvas, options) {
       if (vrDisplay && vrDisplay.isPresenting) {
         vrDisplay.getFrameData(frameData);
         getVRGamepads();
-        if (pressedGamePad) {
-          vec3.transformQuat(stepTrans, step, pressedGamePad.pose.orientation);
+        if (pressedGamepad && buttonIndex === 2) {
+          vec3.transformQuat(stepTrans, step, pressedGamepad.pose.orientation);
           vec3.add(cameraPosition, cameraPosition, stepTrans);
         }
-        self.onGamepadRender(leftGamePad, rightGamePad, pressedGamePad);
+        self.onGamepadChanged(leftGamepad, rightGamepad, pressedGamepad, buttonIndex);
 
         mat4.fromTranslation(tranMat, cameraPosition);
         mat4.invert(tranMat, tranMat);
@@ -3134,21 +3174,24 @@ var Scene = wg.Scene = function (canvas, options) {
     })(0);
 
     function getVRGamepads() {
-      leftGamePad = null;
-      rightGamePad = null;
-      pressedGamePad = null;
+      leftGamepad = null;
+      rightGamepad = null;
+      pressedGamepad = null;
+      buttonIndex = -1;
       var gamepads = navigator.getGamepads();
       for (var i=0; i<gamepads.length; i++) {
         var gamepad = gamepads[i];
         if (gamepad && gamepad.pose) {
           if (gamepad.hand === 'right') {
-            rightGamePad = gamepad;
+            rightGamepad = gamepad;
           } else {
-            leftGamePad = gamepad;
+            leftGamepad = gamepad;
           }
-          gamepad.buttons.some(function (button) {
+          // direction: 0, trigger: 1, side: 2, menu: 3
+          gamepad.buttons.some(function (button, index) {
             if (button.pressed) {
-              pressedGamePad = gamepad;
+              pressedGamepad = gamepad;
+              buttonIndex = index;
               return true;
             }
           });
@@ -3161,7 +3204,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._initVR();
 };
 
-Scene.prototype.onGamepadRender = function () {
+Scene.prototype.onGamepadChanged = function (leftGamepad, rightGamepad, pressedGamepad, buttonIndex) {
 };
 
 Scene.prototype.onAnimationFrame = function () {
@@ -3247,7 +3290,7 @@ Scene.prototype.draw = function () {
   self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self._getVertexArrayObject(object.type);
+    var vao = self.getVertexArrayObject(object);
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
@@ -3258,6 +3301,7 @@ Scene.prototype.draw = function () {
         u_normalMap: !!object.imageNormal,
         u_modelViewMatrix: object._modelViewMatrix,
         u_modelViewProjectMatrix: object._modelViewProjectMatrix,
+        u_light: object.light !== false,
       });
       if (object.image) {
         gl.cache.textures.get(object.image).bind(0);
@@ -3273,7 +3317,18 @@ Scene.prototype.draw = function () {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
       }
-      vao.draw(true);
+      vao.draw(preDrawCallback);
+    }
+  }
+
+  function preDrawCallback (part) {
+    sceneProgram.setUniforms({
+      u_texture: !!part.image
+    });
+    if (part.image) {
+      gl.cache.textures.get(part.image).bind(0);
+    } else {
+      gl.vertexAttrib4fv(attributesMap.color.index, part.color);
     }
   }
 };
@@ -3290,13 +3345,17 @@ Scene.prototype.clear = function () {
   self._dirty = true;
 };
 
-Scene.prototype._getVertexArrayObject = function (type) {
+Scene.prototype.getVertexArrayObject = function (object) {
   var self = this,
     gl = self._gl,
+    type = object.type,
     geometry = wg.geometries[type],
     vao = gl.cache.vaos[type];
+  if (object.vao) {
+    return object.vao;
+  }
   if (geometry && !vao) {
-    vao = gl.cache.vaos[type] = new VertexArrayObject(self, {
+    vao = gl.cache.vaos[type] = new VertexArrayObject(gl, {
       buffers: geometry
     });
   }
@@ -3523,24 +3582,18 @@ wg.Object.prototype.setRotation = function (x, y, z) {
   return self;
 };
 
-wg.Object.prototype._calculateMatrix = function () {
-  var self = this;
+wg.Object.prototype.getModelMatrix = function () {
+  var self = this,
+    modelMatrix = self._modelMatrix;
   if (self._matrixDirty) {
     self._matrixDirty = false;
-    mat4.fromTranslation(self._modelMatrix, self._position);
-    mat4.rotateX(self._modelMatrix, self._modelMatrix, self._rotation[0]);
-    mat4.rotateY(self._modelMatrix, self._modelMatrix, self._rotation[1]);
-    mat4.rotateZ(self._modelMatrix, self._modelMatrix, self._rotation[2]);
-    mat4.scale(self._modelMatrix, self._modelMatrix, self._scale);
+    mat4.fromTranslation(modelMatrix, self._position);
+    mat4.rotateX(modelMatrix, modelMatrix, self._rotation[0]);
+    mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
+    mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
+    mat4.scale(modelMatrix, modelMatrix, self._scale);
   }
-};
-
-wg.Object.prototype.getModelMatrix = function () {
-  var self = this;
-  if (self._matrixDirty) {
-    self._calculateMatrix();
-  }
-  return self._modelMatrix;
+  return modelMatrix;
 };
 
 wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {
