@@ -17,6 +17,9 @@
  *     dataType: default 'UNSIGNED_BYTE'
  *     format: default 'RGBA'
  *     data: default undefinded
+ *     type: default '2D', options: '2D', 'CUBE_MAP'
+ *       if type is 'CUBE_MAP', then url is array of string
+ *       POSITIVE_X, NEGATIVE_X, POSITIVE_Y, NEGATIVE_Y, POSITIVE_Z, NEGATIVE_Z
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
@@ -30,28 +33,48 @@ var Texture = wg.Texture = function (gl, options) {
   self._unit = 0;
 
   if (url) {
-    var image = self._image = new Image();
-    gl.initingTextures[url] = image;
-    image.onload = function () {
-      image.onload = null;
-      image.onerror = null;
-      delete gl.initingTextures[url];
-      self._imageLoaded = true;
-      gl.cache.textures.trigger.fire({
-        type: 'load',
-        source: self
+    var imageCount = 1;
+    if (options.type === 'CUBE_MAP') {
+      imageCount = url.length;
+      self._image = [];
+      url.forEach(function (urlItem) {
+        self._image.push(loadImage(urlItem));
       });
-    };
-    image.onerror = function () {
-      image.onload = null;
-      image.onerror = null;
-      delete gl.initingTextures[url];
-      gl.cache.textures.trigger.fire({
-        type: 'error',
-        source: self
-      });
-    };
-    image.src = url;
+    } else {
+      self._image = loadImage(url);
+    }
+
+    function loadImage (url) {
+      var image = new Image();
+      gl.initingTextures[url] = image;
+      image.onload = function () {
+        image.onload = null;
+        image.onerror = null;
+        delete gl.initingTextures[url];
+        imageCount--;
+        if (imageCount === 0) {
+          self._imageLoaded = true;
+          gl.cache.textures.trigger.fire({
+            type: 'load',
+            source: self
+          });
+        }
+      };
+      image.onerror = function () {
+        image.onload = null;
+        image.onerror = null;
+        delete gl.initingTextures[url];
+        imageCount--;
+        if (imageCount === 0) {
+          gl.cache.textures.trigger.fire({
+            type: 'error',
+            source: self
+          });
+        }
+      };
+      image.src = url;
+      return image;
+    }
   }
 };
 
@@ -59,10 +82,11 @@ Texture.prototype.bind = function (unit) {
   var self = this,
     gl = self._gl,
     options = self._options,
+    type = gl['TEXTURE_' + (options.type || '2D')],
     width, height;
   self._unit = unit;
   gl.activeTexture(gl.TEXTURE0 + unit);
-  gl.bindTexture(gl.TEXTURE_2D, self._texture);
+  gl.bindTexture(type, self._texture);
 
   if (!self._initialized) {
     self._initialized = true;
@@ -73,51 +97,83 @@ Texture.prototype.bind = function (unit) {
       (options.flipY == null ? false : options.flipY) ? 1 : 0
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_MAG_FILTER,
       gl[options.magFilter || 'LINEAR']
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_MIN_FILTER,
       gl[options.minFilter || 'LINEAR']
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_WRAP_S,
       gl[options.wrapS || 'CLAMP_TO_EDGE']
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_WRAP_T,
       gl[options.wrapT || 'CLAMP_TO_EDGE']
     );
 
     if (width && height) {
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl[options.format || 'RGBA'],
-        width,
-        height,
-        0,
-        gl[options.format || 'RGBA'],
-        gl[options.dataType || 'UNSIGNED_BYTE'],
-        options.data
-      );
+      if (options.type === 'CUBE_MAP') {
+        for (var i=0; i<6; i++) {
+          gl.texImage2D(
+            i + gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+            0,
+            gl[options.format || 'RGBA'],
+            width,
+            height,
+            0,
+            gl[options.format || 'RGBA'],
+            gl[options.dataType || 'UNSIGNED_BYTE'],
+            options.data
+          );
+        }
+      } else {
+        gl.texImage2D(
+          type,
+          0,
+          gl[options.format || 'RGBA'],
+          width,
+          height,
+          0,
+          gl[options.format || 'RGBA'],
+          gl[options.dataType || 'UNSIGNED_BYTE'],
+          options.data
+        );
+      }
     } else {
       if (!self._imageLoaded) {
-        gl.texImage2D(
-          gl.TEXTURE_2D, // target
-          0, // mipmapLevel
-          gl.RGBA, // internalFormat
-          1, // width
-          1, // height
-          0, // border
-          gl.RGBA, // dataFormat
-          gl.UNSIGNED_BYTE, // dataType
-          new Uint8Array([127, 127, 127, 255]) // dataArray
-        );
+        if (options.type === 'CUBE_MAP') {
+          for (var i=0; i<6; i++) {
+            gl.texImage2D(
+              i + gl.TEXTURE_CUBE_MAP_POSITIVE_X, // target
+              0, // mipmapLevel
+              gl.RGBA, // internalFormat
+              1, // width
+              1, // height
+              0, // border
+              gl.RGBA, // dataFormat
+              gl.UNSIGNED_BYTE, // dataType
+              new Uint8Array([127, 127, 127, 255]) // dataArray
+            );
+          }
+        } else {
+          gl.texImage2D(
+            type, // target
+            0, // mipmapLevel
+            gl.RGBA, // internalFormat
+            1, // width
+            1, // height
+            0, // border
+            gl.RGBA, // dataFormat
+            gl.UNSIGNED_BYTE, // dataType
+            new Uint8Array([127, 127, 127, 255]) // dataArray
+          );
+        }
       }
     }
   }
@@ -128,28 +184,42 @@ Texture.prototype.bind = function (unit) {
     if (gl._anisotropicExt) {
       var anisotropy = options.anisotropy || 16;
       anisotropy = Math.min(gl._max_anisotropy, anisotropy);
-      gl.texParameterf(gl.TEXTURE_2D, gl._anisotropicExt.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
+      gl.texParameterf(type, gl._anisotropicExt.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
     }
     gl.pixelStorei(
       gl.UNPACK_FLIP_Y_WEBGL,
       (options.flipY == null ? true : options.flipY) ? 1 : 0
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_MIN_FILTER,
       gl[options.minFilter || 'LINEAR_MIPMAP_NEAREST']
     );
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      (options.powerOfTwo == null ? true : options.powerOfTwo) ?
-        getPowerOfTwoImage(self._image) : self._image
-    );
+    if (options.type === 'CUBE_MAP') {
+      self._image.forEach(function (imageItem, index) {
+        gl.texImage2D(
+          index + gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+          0,
+          gl.RGBA,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          (options.powerOfTwo == null ? true : options.powerOfTwo) ?
+            getPowerOfTwoImage(imageItem) : imageItem
+        );
+      });
+    } else {
+      gl.texImage2D(
+        type,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        (options.powerOfTwo == null ? true : options.powerOfTwo) ?
+          getPowerOfTwoImage(self._image) : self._image
+      );
+    }
     if (options.mipmap == null ? true : options.mipmap) {
-      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.generateMipmap(type);
     }
     self._image = null;
   }
@@ -157,9 +227,11 @@ Texture.prototype.bind = function (unit) {
 
 Texture.prototype.dispose = function () {
   var self = this,
-    gl = self._gl;
+    gl = self._gl,
+    options = self._options,
+    type = gl['TEXTURE_' + (options.type || '2D')];
   gl.activeTexture(gl.TEXTURE0 + self._unit);
-  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindTexture(type, null);
   gl.deleteTexture(self._texture);
   self._texture = null;
 };

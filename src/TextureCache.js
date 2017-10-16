@@ -1,20 +1,26 @@
 var TextureCache = wg.TextureCache = function (gl) {
   var self = this;
   self.gl = gl;
-  self.cache = {};
+  self.cache = new Map();
   self.trigger = new Trigger();
 };
 
 TextureCache.prototype.get = function (url) {
-  // TODO same url, but different options
   var self = this,
     cache = self.cache,
-    gl = self.gl;
-  var imageTexture = cache[url];
+    gl = self.gl,
+    options;
+  var imageTexture = cache.get(url);
   if (!imageTexture) {
-    imageTexture = cache[url] = new Texture(gl, {
-      url: url
-    });
+    if (typeof url === 'string') {
+      options = {
+        url: url
+      };
+    } else {
+      options = url;
+    }
+    imageTexture = new Texture(gl, options);
+    cache.set(url, imageTexture);
   }
   return imageTexture;
 };

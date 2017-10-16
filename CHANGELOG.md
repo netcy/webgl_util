@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.13.0] - 2017-10-16
+### Added
+- Texture support CUBE_MAP
+
+
 ## [0.12.0] - 2017-10-13
 ### Added
 - VertexArrayObject#setPosition

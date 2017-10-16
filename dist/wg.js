@@ -856,6 +856,9 @@ Framebuffer.prototype.dispose = function () {
  *     dataType: default 'UNSIGNED_BYTE'
  *     format: default 'RGBA'
  *     data: default undefinded
+ *     type: default '2D', options: '2D', 'CUBE_MAP'
+ *       if type is 'CUBE_MAP', then url is array of string
+ *       POSITIVE_X, NEGATIVE_X, POSITIVE_Y, NEGATIVE_Y, POSITIVE_Z, NEGATIVE_Z
  */
 var Texture = wg.Texture = function (gl, options) {
   var self = this,
@@ -869,28 +872,48 @@ var Texture = wg.Texture = function (gl, options) {
   self._unit = 0;
 
   if (url) {
-    var image = self._image = new Image();
-    gl.initingTextures[url] = image;
-    image.onload = function () {
-      image.onload = null;
-      image.onerror = null;
-      delete gl.initingTextures[url];
-      self._imageLoaded = true;
-      gl.cache.textures.trigger.fire({
-        type: 'load',
-        source: self
+    var imageCount = 1;
+    if (options.type === 'CUBE_MAP') {
+      imageCount = url.length;
+      self._image = [];
+      url.forEach(function (urlItem) {
+        self._image.push(loadImage(urlItem));
       });
-    };
-    image.onerror = function () {
-      image.onload = null;
-      image.onerror = null;
-      delete gl.initingTextures[url];
-      gl.cache.textures.trigger.fire({
-        type: 'error',
-        source: self
-      });
-    };
-    image.src = url;
+    } else {
+      self._image = loadImage(url);
+    }
+
+    function loadImage (url) {
+      var image = new Image();
+      gl.initingTextures[url] = image;
+      image.onload = function () {
+        image.onload = null;
+        image.onerror = null;
+        delete gl.initingTextures[url];
+        imageCount--;
+        if (imageCount === 0) {
+          self._imageLoaded = true;
+          gl.cache.textures.trigger.fire({
+            type: 'load',
+            source: self
+          });
+        }
+      };
+      image.onerror = function () {
+        image.onload = null;
+        image.onerror = null;
+        delete gl.initingTextures[url];
+        imageCount--;
+        if (imageCount === 0) {
+          gl.cache.textures.trigger.fire({
+            type: 'error',
+            source: self
+          });
+        }
+      };
+      image.src = url;
+      return image;
+    }
   }
 };
 
@@ -898,10 +921,11 @@ Texture.prototype.bind = function (unit) {
   var self = this,
     gl = self._gl,
     options = self._options,
+    type = gl['TEXTURE_' + (options.type || '2D')],
     width, height;
   self._unit = unit;
   gl.activeTexture(gl.TEXTURE0 + unit);
-  gl.bindTexture(gl.TEXTURE_2D, self._texture);
+  gl.bindTexture(type, self._texture);
 
   if (!self._initialized) {
     self._initialized = true;
@@ -912,51 +936,83 @@ Texture.prototype.bind = function (unit) {
       (options.flipY == null ? false : options.flipY) ? 1 : 0
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_MAG_FILTER,
       gl[options.magFilter || 'LINEAR']
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_MIN_FILTER,
       gl[options.minFilter || 'LINEAR']
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_WRAP_S,
       gl[options.wrapS || 'CLAMP_TO_EDGE']
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_WRAP_T,
       gl[options.wrapT || 'CLAMP_TO_EDGE']
     );
 
     if (width && height) {
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl[options.format || 'RGBA'],
-        width,
-        height,
-        0,
-        gl[options.format || 'RGBA'],
-        gl[options.dataType || 'UNSIGNED_BYTE'],
-        options.data
-      );
+      if (options.type === 'CUBE_MAP') {
+        for (var i=0; i<6; i++) {
+          gl.texImage2D(
+            i + gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+            0,
+            gl[options.format || 'RGBA'],
+            width,
+            height,
+            0,
+            gl[options.format || 'RGBA'],
+            gl[options.dataType || 'UNSIGNED_BYTE'],
+            options.data
+          );
+        }
+      } else {
+        gl.texImage2D(
+          type,
+          0,
+          gl[options.format || 'RGBA'],
+          width,
+          height,
+          0,
+          gl[options.format || 'RGBA'],
+          gl[options.dataType || 'UNSIGNED_BYTE'],
+          options.data
+        );
+      }
     } else {
       if (!self._imageLoaded) {
-        gl.texImage2D(
-          gl.TEXTURE_2D, // target
-          0, // mipmapLevel
-          gl.RGBA, // internalFormat
-          1, // width
-          1, // height
-          0, // border
-          gl.RGBA, // dataFormat
-          gl.UNSIGNED_BYTE, // dataType
-          new Uint8Array([127, 127, 127, 255]) // dataArray
-        );
+        if (options.type === 'CUBE_MAP') {
+          for (var i=0; i<6; i++) {
+            gl.texImage2D(
+              i + gl.TEXTURE_CUBE_MAP_POSITIVE_X, // target
+              0, // mipmapLevel
+              gl.RGBA, // internalFormat
+              1, // width
+              1, // height
+              0, // border
+              gl.RGBA, // dataFormat
+              gl.UNSIGNED_BYTE, // dataType
+              new Uint8Array([127, 127, 127, 255]) // dataArray
+            );
+          }
+        } else {
+          gl.texImage2D(
+            type, // target
+            0, // mipmapLevel
+            gl.RGBA, // internalFormat
+            1, // width
+            1, // height
+            0, // border
+            gl.RGBA, // dataFormat
+            gl.UNSIGNED_BYTE, // dataType
+            new Uint8Array([127, 127, 127, 255]) // dataArray
+          );
+        }
       }
     }
   }
@@ -967,28 +1023,42 @@ Texture.prototype.bind = function (unit) {
     if (gl._anisotropicExt) {
       var anisotropy = options.anisotropy || 16;
       anisotropy = Math.min(gl._max_anisotropy, anisotropy);
-      gl.texParameterf(gl.TEXTURE_2D, gl._anisotropicExt.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
+      gl.texParameterf(type, gl._anisotropicExt.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
     }
     gl.pixelStorei(
       gl.UNPACK_FLIP_Y_WEBGL,
       (options.flipY == null ? true : options.flipY) ? 1 : 0
     );
     gl.texParameteri(
-      gl.TEXTURE_2D,
+      type,
       gl.TEXTURE_MIN_FILTER,
       gl[options.minFilter || 'LINEAR_MIPMAP_NEAREST']
     );
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      (options.powerOfTwo == null ? true : options.powerOfTwo) ?
-        getPowerOfTwoImage(self._image) : self._image
-    );
+    if (options.type === 'CUBE_MAP') {
+      self._image.forEach(function (imageItem, index) {
+        gl.texImage2D(
+          index + gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+          0,
+          gl.RGBA,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          (options.powerOfTwo == null ? true : options.powerOfTwo) ?
+            getPowerOfTwoImage(imageItem) : imageItem
+        );
+      });
+    } else {
+      gl.texImage2D(
+        type,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        (options.powerOfTwo == null ? true : options.powerOfTwo) ?
+          getPowerOfTwoImage(self._image) : self._image
+      );
+    }
     if (options.mipmap == null ? true : options.mipmap) {
-      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.generateMipmap(type);
     }
     self._image = null;
   }
@@ -996,9 +1066,11 @@ Texture.prototype.bind = function (unit) {
 
 Texture.prototype.dispose = function () {
   var self = this,
-    gl = self._gl;
+    gl = self._gl,
+    options = self._options,
+    type = gl['TEXTURE_' + (options.type || '2D')];
   gl.activeTexture(gl.TEXTURE0 + self._unit);
-  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindTexture(type, null);
   gl.deleteTexture(self._texture);
   self._texture = null;
 };
@@ -1007,20 +1079,26 @@ Texture.prototype.dispose = function () {
 var TextureCache = wg.TextureCache = function (gl) {
   var self = this;
   self.gl = gl;
-  self.cache = {};
+  self.cache = new Map();
   self.trigger = new Trigger();
 };
 
 TextureCache.prototype.get = function (url) {
-  // TODO same url, but different options
   var self = this,
     cache = self.cache,
-    gl = self.gl;
-  var imageTexture = cache[url];
+    gl = self.gl,
+    options;
+  var imageTexture = cache.get(url);
   if (!imageTexture) {
-    imageTexture = cache[url] = new Texture(gl, {
-      url: url
-    });
+    if (typeof url === 'string') {
+      options = {
+        url: url
+      };
+    } else {
+      options = url;
+    }
+    imageTexture = new Texture(gl, options);
+    cache.set(url, imageTexture);
   }
   return imageTexture;
 };
@@ -2860,12 +2938,14 @@ attribute vec3 a_barycentric;
 uniform mat4 u_modelViewProjectMatrix;
 uniform mat4 u_modelViewMatrix;
 uniform mat3 u_normalMatrix;
+uniform mat3 u_normalViewMatrix;
 uniform vec2 u_textureScale;
 uniform bool u_normalMap;
 
 uniform vec3 u_lightPosition;
 
 varying vec3 v_normal;
+varying vec3 v_normalView;
 varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
@@ -2876,6 +2956,7 @@ varying vec3 v_eyeDirection;
 void main () {
   vec4 position = vec4(a_position, 1.0);
   gl_Position = u_modelViewProjectMatrix * position;
+  v_normalView = u_normalViewMatrix * a_normal;
   v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv * u_textureScale;
   v_color = a_color;
@@ -2887,12 +2968,12 @@ void main () {
   v_eyeDirection = -viewPosition;
 
   if (u_normalMap) {
-    vec3 tangent = u_normalMatrix * a_tangent;
-    vec3 bitangent = cross(v_normal, tangent);
+    vec3 tangent = u_normalViewMatrix * a_tangent;
+    vec3 bitangent = cross(v_normalView, tangent);
     mat3 tbnMatrix = mat3(
-      tangent.x, bitangent.x, v_normal.x,
-      tangent.y, bitangent.y, v_normal.y,
-      tangent.z, bitangent.z, v_normal.z
+      tangent.x, bitangent.x, v_normalView.x,
+      tangent.y, bitangent.y, v_normalView.y,
+      tangent.z, bitangent.z, v_normalView.z
     );
     v_lightDirection = tbnMatrix * v_lightDirection;
     v_eyeDirection = tbnMatrix * v_eyeDirection;
@@ -2916,9 +2997,12 @@ uniform vec3 u_wireframeColor;
 uniform float u_wireframeWidth;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
+uniform samplerCube u_samplerCubeImage;
 uniform bool u_light;
+uniform bool u_cubeMap;
 
 varying vec3 v_normal;
+varying vec3 v_normalView;
 varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
@@ -2951,16 +3035,21 @@ void main () {
     // gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor(v_modelPosition.xyz * 500.0)));
     gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
   } else {
-    vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normal);
-    vec3 lightDirection = normalize(v_lightDirection);
-    vec3 eyeDirection = normalize(v_eyeDirection);
-    float diffuse = max(dot(lightDirection, normal), 0.0);
-
-    vec3 reflectDirection = reflect(-lightDirection, normal);
-    float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
-
-    vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
+    vec4 color = v_color;
+    if (u_cubeMap) {
+      color = textureCube(u_samplerCubeImage, v_normal);
+    } else if (u_texture) {
+      color = texture2D(u_samplerImage, v_uv);
+    }
     if (u_light) {
+      vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normalView);
+      vec3 lightDirection = normalize(v_lightDirection);
+      vec3 eyeDirection = normalize(v_eyeDirection);
+      float diffuse = max(dot(lightDirection, normal), 0.0);
+
+      vec3 reflectDirection = reflect(-lightDirection, normal);
+      float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
+
       vec3 ambientColor = u_ambientColor * color.rgb;
       vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
       vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
@@ -3083,16 +3172,22 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    gl.enable(gl.CULL_FACE);
+    // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    // gl.disable(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
       height: 1,
       data: new Uint8Array([255, 255, 255, 255])
+    });
+    gl.cache.emptyCubeTexture = new Texture(gl, {
+      width: 1,
+      height: 1,
+      data: new Uint8Array([255, 255, 255, 255]),
+      type: 'CUBE_MAP'
     });
     self._sceneProgram = new Program(gl, {
       vertex: VERTEX_SHADER_SCENE,
@@ -3244,6 +3339,7 @@ Scene.prototype.draw = function () {
     u_wireframeOnly: self._wireframeOnly,
     u_samplerImage: 0,
     u_samplerNormal: 1,
+    u_samplerCubeImage: 2,
   });
 
   gl.disable(gl.BLEND);
@@ -3290,11 +3386,13 @@ Scene.prototype.draw = function () {
   self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self.getVertexArrayObject(object);
+    var vao = self.getVertexArrayObject(object),
+      cubeMap = object.image && object.image.type === 'CUBE_MAP';
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
         u_normalMatrix: object._normalMatrix,
+        u_normalViewMatrix: object._normalViewMatrix,
         u_texture: !!object.image,
         u_wireframe: !!object.wireframe,
         u_textureScale: object.textureScale,
@@ -3302,9 +3400,16 @@ Scene.prototype.draw = function () {
         u_modelViewMatrix: object._modelViewMatrix,
         u_modelViewProjectMatrix: object._modelViewProjectMatrix,
         u_light: object.light !== false,
+        u_cubeMap: cubeMap
       });
       if (object.image) {
-        gl.cache.textures.get(object.image).bind(0);
+        if (cubeMap) {
+          gl.cache.emptyTexture.bind(0);
+          gl.cache.textures.get(object.image).bind(2);
+        } else {
+          gl.cache.textures.get(object.image).bind(0);
+          gl.cache.emptyCubeTexture.bind(2);
+        }
         if (object.imageNormal) {
           gl.cache.textures.get(object.imageNormal).bind(1);
         } else {
@@ -3313,6 +3418,7 @@ Scene.prototype.draw = function () {
       } else {
         gl.cache.emptyTexture.bind(0);
         gl.cache.emptyTexture.bind(1);
+        gl.cache.emptyCubeTexture.bind(2);
         if (!vao._color) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
@@ -3552,6 +3658,7 @@ wg.Object = function () {
   self._modelViewMatrix = mat4.create();
   self._modelViewProjectMatrix = mat4.create();
   self._normalMatrix = mat3.create();
+  self._normalViewMatrix = mat3.create();
   self.type = null;
   self._position = vec3.create();
   self._scale = vec3.fromValues(1, 1, 1);
@@ -3592,6 +3699,7 @@ wg.Object.prototype.getModelMatrix = function () {
     mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
     mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
     mat4.scale(modelMatrix, modelMatrix, self._scale);
+    mat3.normalFromMat4(self._normalMatrix, modelMatrix);
   }
   return modelMatrix;
 };
@@ -3599,7 +3707,7 @@ wg.Object.prototype.getModelMatrix = function () {
 wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {
   var self = this;
   mat4.multiply(self._modelViewMatrix, viewMatrix, self.getModelMatrix());
-  mat3.normalFromMat4(self._normalMatrix, self._modelViewMatrix);
+  mat3.normalFromMat4(self._normalViewMatrix, self._modelViewMatrix);
   mat4.multiply(self._modelViewProjectMatrix, projectMatrix, self._modelViewMatrix);
 };
 

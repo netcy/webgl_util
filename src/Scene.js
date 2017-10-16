@@ -13,12 +13,14 @@ attribute vec3 a_barycentric;
 uniform mat4 u_modelViewProjectMatrix;
 uniform mat4 u_modelViewMatrix;
 uniform mat3 u_normalMatrix;
+uniform mat3 u_normalViewMatrix;
 uniform vec2 u_textureScale;
 uniform bool u_normalMap;
 
 uniform vec3 u_lightPosition;
 
 varying vec3 v_normal;
+varying vec3 v_normalView;
 varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
@@ -29,6 +31,7 @@ varying vec3 v_eyeDirection;
 void main () {
   vec4 position = vec4(a_position, 1.0);
   gl_Position = u_modelViewProjectMatrix * position;
+  v_normalView = u_normalViewMatrix * a_normal;
   v_normal = u_normalMatrix * a_normal;
   v_uv = a_uv * u_textureScale;
   v_color = a_color;
@@ -40,12 +43,12 @@ void main () {
   v_eyeDirection = -viewPosition;
 
   if (u_normalMap) {
-    vec3 tangent = u_normalMatrix * a_tangent;
-    vec3 bitangent = cross(v_normal, tangent);
+    vec3 tangent = u_normalViewMatrix * a_tangent;
+    vec3 bitangent = cross(v_normalView, tangent);
     mat3 tbnMatrix = mat3(
-      tangent.x, bitangent.x, v_normal.x,
-      tangent.y, bitangent.y, v_normal.y,
-      tangent.z, bitangent.z, v_normal.z
+      tangent.x, bitangent.x, v_normalView.x,
+      tangent.y, bitangent.y, v_normalView.y,
+      tangent.z, bitangent.z, v_normalView.z
     );
     v_lightDirection = tbnMatrix * v_lightDirection;
     v_eyeDirection = tbnMatrix * v_eyeDirection;
@@ -69,9 +72,12 @@ uniform vec3 u_wireframeColor;
 uniform float u_wireframeWidth;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
+uniform samplerCube u_samplerCubeImage;
 uniform bool u_light;
+uniform bool u_cubeMap;
 
 varying vec3 v_normal;
+varying vec3 v_normalView;
 varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
@@ -104,16 +110,21 @@ void main () {
     // gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor(v_modelPosition.xyz * 500.0)));
     gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
   } else {
-    vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normal);
-    vec3 lightDirection = normalize(v_lightDirection);
-    vec3 eyeDirection = normalize(v_eyeDirection);
-    float diffuse = max(dot(lightDirection, normal), 0.0);
-
-    vec3 reflectDirection = reflect(-lightDirection, normal);
-    float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
-
-    vec4 color = u_texture ? texture2D(u_samplerImage, v_uv) : v_color;
+    vec4 color = v_color;
+    if (u_cubeMap) {
+      color = textureCube(u_samplerCubeImage, v_normal);
+    } else if (u_texture) {
+      color = texture2D(u_samplerImage, v_uv);
+    }
     if (u_light) {
+      vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normalView);
+      vec3 lightDirection = normalize(v_lightDirection);
+      vec3 eyeDirection = normalize(v_eyeDirection);
+      float diffuse = max(dot(lightDirection, normal), 0.0);
+
+      vec3 reflectDirection = reflect(-lightDirection, normal);
+      float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
+
       vec3 ambientColor = u_ambientColor * color.rgb;
       vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
       vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
@@ -236,16 +247,22 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    gl.enable(gl.CULL_FACE);
+    // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    // gl.disable(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
       height: 1,
       data: new Uint8Array([255, 255, 255, 255])
+    });
+    gl.cache.emptyCubeTexture = new Texture(gl, {
+      width: 1,
+      height: 1,
+      data: new Uint8Array([255, 255, 255, 255]),
+      type: 'CUBE_MAP'
     });
     self._sceneProgram = new Program(gl, {
       vertex: VERTEX_SHADER_SCENE,
@@ -397,6 +414,7 @@ Scene.prototype.draw = function () {
     u_wireframeOnly: self._wireframeOnly,
     u_samplerImage: 0,
     u_samplerNormal: 1,
+    u_samplerCubeImage: 2,
   });
 
   gl.disable(gl.BLEND);
@@ -443,11 +461,13 @@ Scene.prototype.draw = function () {
   self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self.getVertexArrayObject(object);
+    var vao = self.getVertexArrayObject(object),
+      cubeMap = object.image && object.image.type === 'CUBE_MAP';
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
         u_normalMatrix: object._normalMatrix,
+        u_normalViewMatrix: object._normalViewMatrix,
         u_texture: !!object.image,
         u_wireframe: !!object.wireframe,
         u_textureScale: object.textureScale,
@@ -455,9 +475,16 @@ Scene.prototype.draw = function () {
         u_modelViewMatrix: object._modelViewMatrix,
         u_modelViewProjectMatrix: object._modelViewProjectMatrix,
         u_light: object.light !== false,
+        u_cubeMap: cubeMap
       });
       if (object.image) {
-        gl.cache.textures.get(object.image).bind(0);
+        if (cubeMap) {
+          gl.cache.emptyTexture.bind(0);
+          gl.cache.textures.get(object.image).bind(2);
+        } else {
+          gl.cache.textures.get(object.image).bind(0);
+          gl.cache.emptyCubeTexture.bind(2);
+        }
         if (object.imageNormal) {
           gl.cache.textures.get(object.imageNormal).bind(1);
         } else {
@@ -466,6 +493,7 @@ Scene.prototype.draw = function () {
       } else {
         gl.cache.emptyTexture.bind(0);
         gl.cache.emptyTexture.bind(1);
+        gl.cache.emptyCubeTexture.bind(2);
         if (!vao._color) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
