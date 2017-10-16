@@ -53,12 +53,12 @@ function init () {
       'images/skybox/fire/pano_f.jpg',
       'images/skybox/fire/pano_b.jpg',*/
 
-      /*'images/skybox/sb_iceflow/iceflow_rt.tga',
-      'images/skybox/sb_iceflow/iceflow_lf.tga',
-      'images/skybox/sb_iceflow/iceflow_up.tga',
-      'images/skybox/sb_iceflow/iceflow_dn.tga',
-      'images/skybox/sb_iceflow/iceflow_ft.tga',
-      'images/skybox/sb_iceflow/iceflow_bk.tga',*/
+      /*'images/skybox/sb_iceflow/iceflow_rt.jpg',
+      'images/skybox/sb_iceflow/iceflow_lf.jpg',
+      'images/skybox/sb_iceflow/iceflow_up.jpg',
+      'images/skybox/sb_iceflow/iceflow_dn.jpg',
+      'images/skybox/sb_iceflow/iceflow_bk.jpg',
+      'images/skybox/sb_iceflow/iceflow_ft.jpg',*/
     ],
     type: 'CUBE_MAP',
     flipY: false
