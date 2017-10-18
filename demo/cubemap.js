@@ -9,20 +9,7 @@ function init () {
 
   var gui = createGUI(scene);
 
-  var cube = new wg.Cube().setPosition(0, 0, -5);
-  cube.image = 'images/crate.gif';
-  scene.add(cube);
-
-  var sphere = new wg.Sphere().setPosition(-5, 0, 0);
-  sphere.color = [1, 0, 1, 1];
-  scene.add(sphere);
-
-  var torus = new wg.Torus().setPosition(5, 0, 0);
-  torus.color = [1, 0, 1, 1];
-  scene.add(torus);
-
-  var skybox = new wg.Cube();
-  skybox.image = {
+  var image = {
     url: [
       // POSITIVE_X, NEGATIVE_X, POSITIVE_Y, NEGATIVE_Y, POSITIVE_Z, NEGATIVE_Z
       'images/skybox/yokohama2/posx.jpg',
@@ -63,7 +50,30 @@ function init () {
     type: 'CUBE_MAP',
     flipY: false
   };
-  skybox.setScale(200, 200, 200);
+
+  var cube = new wg.Cube().setPosition(0, 0, -5);
+  cube.image = 'images/crate.gif';
+  scene.add(cube);
+
+  var sphere = new wg.Sphere().setPosition(-5, 0, 0);
+  sphere.color = [1, 0, 1, 1];
+  sphere.imageEnv = image;
+  scene.add(sphere);
+
+  var torus = new wg.Torus().setPosition(5, 0, 0);
+  torus.color = [1, 0, 1, 1];
+  torus.imageEnv = image;
+  scene.add(torus);
+
+  var skybox = new wg.Cube();
+  skybox.image = image;
+  skybox.setScale(50, 50, 50);
   skybox.light = false;
   scene.add(skybox);
+
+  var center = new wg.Cube();
+  center.image = 'images/crate.gif';
+  center.imageEnv = image;
+  center.light = false;
+  scene.add(center);
 }

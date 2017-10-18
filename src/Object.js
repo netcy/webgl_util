@@ -4,6 +4,7 @@ wg.Object = function () {
   self.id = objectId++;
   self._modelMatrix = mat4.create();
   self._modelViewMatrix = mat4.create();
+  self._modelViewInvMatrix = mat3.create();
   self._modelViewProjectMatrix = mat4.create();
   self._normalMatrix = mat3.create();
   self._normalViewMatrix = mat3.create();
@@ -57,9 +58,6 @@ wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {
   mat4.multiply(self._modelViewMatrix, viewMatrix, self.getModelMatrix());
   mat3.normalFromMat4(self._normalViewMatrix, self._modelViewMatrix);
   mat4.multiply(self._modelViewProjectMatrix, projectMatrix, self._modelViewMatrix);
-};
-
-wg.Object.prototype.fromRotationTranslation = function (orientation, position) {
-  var self = this;
-  mat4.fromRotationTranslation(self._modelMatrix, orientation, position);
+  mat3.fromMat4(self._modelViewInvMatrix, self._modelViewMatrix);
+  mat3.invert(self._modelViewInvMatrix, self._modelViewInvMatrix);
 };

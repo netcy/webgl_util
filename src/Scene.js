@@ -12,6 +12,7 @@ attribute vec3 a_barycentric;
 
 uniform mat4 u_modelViewProjectMatrix;
 uniform mat4 u_modelViewMatrix;
+uniform mat4 u_viewMatrix;
 uniform mat3 u_normalMatrix;
 uniform mat3 u_normalViewMatrix;
 uniform vec2 u_textureScale;
@@ -25,6 +26,7 @@ varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
 varying vec4 v_modelPosition;
+varying vec4 v_viewPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
 
@@ -37,6 +39,7 @@ void main () {
   v_color = a_color;
   v_barycentric = a_barycentric;
   v_modelPosition = position;
+  v_viewPosition = u_viewMatrix * position;
 
   vec3 viewPosition = (u_modelViewMatrix * position).xyz;
   v_lightDirection = u_lightPosition - viewPosition;
@@ -73,8 +76,11 @@ uniform float u_wireframeWidth;
 uniform sampler2D u_samplerImage;
 uniform sampler2D u_samplerNormal;
 uniform samplerCube u_samplerCubeImage;
+uniform samplerCube u_samplerEnv;
 uniform bool u_light;
 uniform bool u_cubeMap;
+uniform bool u_envMap;
+uniform mat3 u_modelViewInvMatrix;
 
 varying vec3 v_normal;
 varying vec3 v_normalView;
@@ -82,6 +88,7 @@ varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
 varying vec4 v_modelPosition;
+varying vec4 v_viewPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
 
@@ -115,6 +122,13 @@ void main () {
       color = textureCube(u_samplerCubeImage, v_normal);
     } else if (u_texture) {
       color = texture2D(u_samplerImage, v_uv);
+    }
+    if (u_envMap) {
+      vec3 N = v_normalView;
+      vec3 V = v_viewPosition.xyz;
+      vec3 R = reflect(V, N);
+      R = u_modelViewInvMatrix * R;
+      color = textureCube(u_samplerEnv, R) * color;
     }
     if (u_light) {
       vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normalView);
@@ -191,7 +205,6 @@ var Scene = wg.Scene = function (canvas, options) {
   self._wireframeWidth = 1.0;
   self._wireframeOnly = true;
   self._enableSSAO = false;
-  self._clear = true;
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
 
   var gl = self._gl = canvas.getContext('webgl', options || {
@@ -293,6 +306,7 @@ var Scene = wg.Scene = function (canvas, options) {
       stepTrans = vec3.create(),
       tranMat = mat4.create(),
       viewMatrix = mat4.create(),
+      quaternion = quat.create(),
       cameraPosition = self._camera._position,
       leftGamepad, rightGamepad, pressedGamepad, buttonIndex;
     (function render (time) {
@@ -307,12 +321,18 @@ var Scene = wg.Scene = function (canvas, options) {
         vrDisplay.getFrameData(frameData);
         getVRGamepads();
         if (pressedGamepad && buttonIndex === 2) {
-          vec3.transformQuat(stepTrans, step, pressedGamepad.pose.orientation);
+          mat4.getRotation(quaternion, vrDisplay.stageParameters.sittingToStandingTransform);
+          quat.multiply(quaternion, quaternion, pressedGamepad.pose.orientation);
+          vec3.transformQuat(stepTrans, step, quaternion);
+          if (self._camera._lockY) {
+            stepTrans[1] = 0;
+          }
           vec3.add(cameraPosition, cameraPosition, stepTrans);
         }
         self.onGamepadChanged(leftGamepad, rightGamepad, pressedGamepad, buttonIndex);
 
         mat4.fromTranslation(tranMat, cameraPosition);
+        mat4.multiply(tranMat, tranMat, vrDisplay.stageParameters.sittingToStandingTransform);
         mat4.invert(tranMat, tranMat);
 
         camera._viewMatrix = frameData.leftViewMatrix;
@@ -320,15 +340,14 @@ var Scene = wg.Scene = function (canvas, options) {
         camera._projectMatix = frameData.leftProjectionMatrix;
         self._setViewport(0, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        self._clear = true;
         self.draw();
 
         camera._viewMatrix = frameData.rightViewMatrix;
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
         camera._projectMatix = frameData.rightProjectionMatrix;
         self._setViewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
         self._dirty = true;
-        self._clear = false;
         self.draw();
         vrDisplay.submitFrame();
       } else {
@@ -336,7 +355,6 @@ var Scene = wg.Scene = function (canvas, options) {
           if (time !== 0 && self._dirty) {
             self._setViewport(0, 0, canvas.width, canvas.height);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-            self._clear = true;
             self.draw();
           }
         }
@@ -415,6 +433,8 @@ Scene.prototype.draw = function () {
     u_samplerImage: 0,
     u_samplerNormal: 1,
     u_samplerCubeImage: 2,
+    u_samplerEnv: 3,
+    u_viewMatrix: camera.getViewMatrix(),
   });
 
   gl.disable(gl.BLEND);
@@ -468,6 +488,7 @@ Scene.prototype.draw = function () {
       sceneProgram.setUniforms({
         u_normalMatrix: object._normalMatrix,
         u_normalViewMatrix: object._normalViewMatrix,
+        u_modelViewInvMatrix: object._modelViewInvMatrix,
         u_texture: !!object.image,
         u_wireframe: !!object.wireframe,
         u_textureScale: object.textureScale,
@@ -475,7 +496,8 @@ Scene.prototype.draw = function () {
         u_modelViewMatrix: object._modelViewMatrix,
         u_modelViewProjectMatrix: object._modelViewProjectMatrix,
         u_light: object.light !== false,
-        u_cubeMap: cubeMap
+        u_cubeMap: cubeMap,
+        u_envMap: !!object.imageEnv
       });
       if (object.image) {
         if (cubeMap) {
@@ -497,6 +519,11 @@ Scene.prototype.draw = function () {
         if (!vao._color) {
           gl.vertexAttrib4fv(attributesMap.color.index, object.color);
         }
+      }
+      if (object.imageEnv) {
+        gl.cache.textures.get(object.imageEnv).bind(3);
+      } else {
+        gl.cache.emptyCubeTexture.bind(3);
       }
       vao.draw(preDrawCallback);
     }

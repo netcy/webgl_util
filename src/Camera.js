@@ -19,6 +19,8 @@ var Camera = wg.Camera = function (scene) {
   self._near = 0.1;
   self._far = 1000;
 
+  self._lockY = false;
+
   self._maxRotateX = Math.PI / 2 * 0.95;
   self._rotateX = 0;
   self._rotateY = 0;

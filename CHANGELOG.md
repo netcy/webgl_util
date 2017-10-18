@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.14.0] - 2017-10-18
+### Added
+- WebVR: add sittingToStandingTransform
+- Object#imageEnv: add env map support
+- Camera#lockY
+
+
 ## [0.13.0] - 2017-10-16
 ### Added
 - Texture support CUBE_MAP

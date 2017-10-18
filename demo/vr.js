@@ -4,6 +4,7 @@ var scene, leftController, rightController, selectRay, jumpRay,
   rayPositionStart = vec3.create(),
   rayPositionMiddle = vec3.create(),
   rayPositionEnd = vec3.create(),
+  translateMatrix = mat4.create(),
   rayScale = vec3.fromValues(0.05, 1, 0.05),
   rayOffset = vec3.fromValues(0, 0.5, -0.8);
 
@@ -11,7 +12,9 @@ function init () {
   glMatrix.setMatrixArrayType(Array);
   scene = new wg.Scene('canvas');
   scene.setLightPosition([0, 10, 0]);
-  scene.getCamera().setPosition(0, 0, 4);
+  scene.getCamera().setTarget(0, 0, -1);
+  scene.getCamera().setPosition(0, 0, 0);
+  scene.getCamera()._lockY = true;
   rayScale[1] = scene.getCamera().getFar();
 
   wg.ObjParser.parseObjMtlUrl('obj/vive/', 'vr_controller_vive_1_5', function (obj) {
@@ -28,19 +31,20 @@ function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonInde
   jumpRay.visible = false;
 
   // set gamepad position and rotation
+  mat4.fromTranslation(translateMatrix, scene._camera._position);
   refreshController(leftController, leftGamepad);
   refreshController(rightController, rightGamepad);
   if (pressedGamepad) {
     // direction: 0, trigger: 1, side: 2, menu: 3
     if (buttonIndex === 0) {
       jumpRay.visible = true;
-      vec3.add(rayPositionStart, pressedGamepad.pose.position, scene._camera._position);
+      refreshControllerMatrix(selectRay._modelMatrix, pressedGamepad);
+      vec3.set(rayPositionStart, 0, 0, 0);
       vec3.set(rayPositionMiddle, 0, 0, -1);
       vec3.set(rayPositionEnd, 0, 0, -4);
-      vec3.transformQuat(rayPositionMiddle, rayPositionMiddle, pressedGamepad.pose.orientation);
-      vec3.add(rayPositionMiddle, rayPositionMiddle, rayPositionStart);
-      vec3.transformQuat(rayPositionEnd, rayPositionEnd, pressedGamepad.pose.orientation);
-      vec3.add(rayPositionEnd, rayPositionEnd, rayPositionStart);
+      vec3.transformMat4(rayPositionStart, rayPositionStart, selectRay._modelMatrix);
+      vec3.transformMat4(rayPositionMiddle, rayPositionMiddle, selectRay._modelMatrix);
+      vec3.transformMat4(rayPositionEnd, rayPositionEnd, selectRay._modelMatrix);
       var jumpRayPosition = [
         rayPositionStart[0], rayPositionStart[1], rayPositionStart[2],
         rayPositionMiddle[0], Math.max(rayPositionMiddle[1], 0), rayPositionMiddle[2],
@@ -59,12 +63,17 @@ function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonInde
 
 function refreshController (object, gampad) {
   if (gampad) {
-    vec3.add(object._position, gampad.pose.position, scene._camera._position);
-    object.fromRotationTranslation(gampad.pose.orientation, object._position);
+    refreshControllerMatrix(object._modelMatrix, gampad);
     object.visible = true;
   } else {
     object.visible = false;
   }
+}
+
+function refreshControllerMatrix (matrix, gampad) {
+  mat4.fromRotationTranslation(matrix, gampad.pose.orientation, gampad.pose.position);
+  mat4.multiply(matrix, scene._vrDisplay.stageParameters.sittingToStandingTransform, matrix);
+  mat4.multiply(matrix, translateMatrix, matrix);
 }
 
 function addData () {
