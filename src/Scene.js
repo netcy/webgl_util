@@ -59,7 +59,8 @@ void main () {
 }
 `;
 
-var FRAGMENT_SHADER_SCENE = `#extension GL_OES_standard_derivatives : enable
+var FRAGMENT_SHADER_SCENE = `
+#extension GL_OES_standard_derivatives : enable
 #ifdef GL_ES
   precision highp float;
 #endif
@@ -209,7 +210,7 @@ var Scene = wg.Scene = function (canvas, options) {
 
   var gl = self._gl = canvas.getContext('webgl', options || {
     preserveDrawingBuffer: true,
-    antialias: false,
+    // antialias: false,
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
@@ -260,11 +261,11 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    // gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    gl.disable(gl.CULL_FACE);
+    // gl.disable(gl.CULL_FACE);
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
@@ -614,8 +615,10 @@ Scene.prototype._initVR = function () {
               canvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
             } else {
               self._isPresenting = false;
-              canvas.width = self._oldSize.width;
-              canvas.height = self._oldSize.height;
+              if (self._oldSize) {
+                canvas.width = self._oldSize.width;
+                canvas.height = self._oldSize.height;
+              }
             }
             self._framebuffer.setSize(canvas.width, canvas.height);
           };

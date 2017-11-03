@@ -11,7 +11,7 @@
  *     powerOfTwo: default true when url supported, false or else
  *     minFilter: default 'LINEAR_MIPMAP_NEAREST' when url supported, 'LINEAR' or else
  *     magFilter: default 'LINEAR'
- *     wrapS: default 'CLAMP_TO_EDGE'
+ *     wrapS: default 'CLAMP_TO_EDGE', can be 'REPEAT' or 'CLAMP_TO_EDGE'
  *     wrapT: default 'CLAMP_TO_EDGE'
  *     anisotropy: default 16
  *     dataType: default 'UNSIGNED_BYTE'
@@ -45,6 +45,15 @@ var Texture = wg.Texture = function (gl, options) {
     }
 
     function loadImage (url) {
+      if (url instanceof HTMLImageElement ||
+          url instanceof HTMLCanvasElement ||
+          url instanceof HTMLVideoElement) {
+        imageCount--;
+        if (imageCount === 0) {
+          self._imageLoaded = true;
+        }
+        return url;
+      }
       var image = new Image();
       gl.initingTextures[url] = image;
       image.onload = function () {

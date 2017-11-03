@@ -5,22 +5,25 @@ var TextureCache = wg.TextureCache = function (gl) {
   self.trigger = new Trigger();
 };
 
-TextureCache.prototype.get = function (url) {
+TextureCache.prototype.get = function (image) {
   var self = this,
     cache = self.cache,
     gl = self.gl,
     options;
-  var imageTexture = cache.get(url);
+  var imageTexture = cache.get(image);
   if (!imageTexture) {
-    if (typeof url === 'string') {
+    if (typeof image === 'string' ||
+        image instanceof HTMLImageElement ||
+        image instanceof HTMLCanvasElement ||
+        image instanceof HTMLVideoElement) {
       options = {
-        url: url
+        url: image
       };
     } else {
-      options = url;
+      options = image;
     }
     imageTexture = new Texture(gl, options);
-    cache.set(url, imageTexture);
+    cache.set(image, imageTexture);
   }
   return imageTexture;
 };

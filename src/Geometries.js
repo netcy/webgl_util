@@ -301,7 +301,35 @@ var calculateBarycentric = Util.calculateBarycentric = function (geometry) {
   }
 };
 
+function createPlane () {
+  return {
+    position: [
+      -1.0, -1.0, 0.0,
+       1.0, -1.0, 0.0,
+       1.0,  1.0, 0.0,
+      -1.0, 1.0, 0.0
+    ],
+    normal: [
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0
+    ],
+    uv: [
+      0.0, 0.0,
+      1.0, 0.0,
+      1.0, 1.0,
+      0.0, 1.0
+    ],
+    index: [
+      0, 1, 2,
+      0, 2, 3
+    ]
+  };
+}
+
 addGeometry('cube', createCube(1));
 addGeometry('torus', createTorus(32, 32, 0.5, 1));
 addGeometry('sphere', createSphere(32, 32, 0.5));
 addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
+addGeometry('plane', createPlane());

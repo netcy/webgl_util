@@ -554,10 +554,38 @@ var calculateBarycentric = Util.calculateBarycentric = function (geometry) {
   }
 };
 
+function createPlane () {
+  return {
+    position: [
+      -1.0, -1.0, 0.0,
+       1.0, -1.0, 0.0,
+       1.0,  1.0, 0.0,
+      -1.0, 1.0, 0.0
+    ],
+    normal: [
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0
+    ],
+    uv: [
+      0.0, 0.0,
+      1.0, 0.0,
+      1.0, 1.0,
+      0.0, 1.0
+    ],
+    index: [
+      0, 1, 2,
+      0, 2, 3
+    ]
+  };
+}
+
 addGeometry('cube', createCube(1));
 addGeometry('torus', createTorus(32, 32, 0.5, 1));
 addGeometry('sphere', createSphere(32, 32, 0.5));
 addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
+addGeometry('plane', createPlane());
 
 // Source: src/Program.js
 var attributesMap = {
@@ -850,7 +878,7 @@ Framebuffer.prototype.dispose = function () {
  *     powerOfTwo: default true when url supported, false or else
  *     minFilter: default 'LINEAR_MIPMAP_NEAREST' when url supported, 'LINEAR' or else
  *     magFilter: default 'LINEAR'
- *     wrapS: default 'CLAMP_TO_EDGE'
+ *     wrapS: default 'CLAMP_TO_EDGE', can be 'REPEAT' or 'CLAMP_TO_EDGE'
  *     wrapT: default 'CLAMP_TO_EDGE'
  *     anisotropy: default 16
  *     dataType: default 'UNSIGNED_BYTE'
@@ -884,6 +912,15 @@ var Texture = wg.Texture = function (gl, options) {
     }
 
     function loadImage (url) {
+      if (url instanceof HTMLImageElement ||
+          url instanceof HTMLCanvasElement ||
+          url instanceof HTMLVideoElement) {
+        imageCount--;
+        if (imageCount === 0) {
+          self._imageLoaded = true;
+        }
+        return url;
+      }
       var image = new Image();
       gl.initingTextures[url] = image;
       image.onload = function () {
@@ -1083,22 +1120,25 @@ var TextureCache = wg.TextureCache = function (gl) {
   self.trigger = new Trigger();
 };
 
-TextureCache.prototype.get = function (url) {
+TextureCache.prototype.get = function (image) {
   var self = this,
     cache = self.cache,
     gl = self.gl,
     options;
-  var imageTexture = cache.get(url);
+  var imageTexture = cache.get(image);
   if (!imageTexture) {
-    if (typeof url === 'string') {
+    if (typeof image === 'string' ||
+        image instanceof HTMLImageElement ||
+        image instanceof HTMLCanvasElement ||
+        image instanceof HTMLVideoElement) {
       options = {
-        url: url
+        url: image
       };
     } else {
-      options = url;
+      options = image;
     }
     imageTexture = new Texture(gl, options);
-    cache.set(url, imageTexture);
+    cache.set(image, imageTexture);
   }
   return imageTexture;
 };
@@ -2186,7 +2226,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
       if (object.visible === false) {
         return;
       }
-      if (!object.glow) {
+      if (!object.glow && !object.transparent) {
         var vao = scene.getVertexArrayObject(object);
         if (vao) {
           self._colorProgram.setUniforms({
@@ -2986,7 +3026,8 @@ void main () {
 }
 `;
 
-var FRAGMENT_SHADER_SCENE = `#extension GL_OES_standard_derivatives : enable
+var FRAGMENT_SHADER_SCENE = `
+#extension GL_OES_standard_derivatives : enable
 #ifdef GL_ES
   precision highp float;
 #endif
@@ -3136,7 +3177,7 @@ var Scene = wg.Scene = function (canvas, options) {
 
   var gl = self._gl = canvas.getContext('webgl', options || {
     preserveDrawingBuffer: true,
-    antialias: false,
+    // antialias: false,
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
@@ -3187,11 +3228,11 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    // gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    gl.disable(gl.CULL_FACE);
+    // gl.disable(gl.CULL_FACE);
 
     gl.cache.emptyTexture = new Texture(gl, {
       width: 1,
@@ -3541,8 +3582,10 @@ Scene.prototype._initVR = function () {
               canvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
             } else {
               self._isPresenting = false;
-              canvas.width = self._oldSize.width;
-              canvas.height = self._oldSize.height;
+              if (self._oldSize) {
+                canvas.width = self._oldSize.width;
+                canvas.height = self._oldSize.height;
+              }
             }
             self._framebuffer.setSize(canvas.width, canvas.height);
           };

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.15.0] - 2017-11-03
+### Added
+- WebVR: add instruction to controller buttons (press menu button)
+- WebVR: press direction buttton to jump, and show grid when jump
+
+### Changed
+- Texture support Image, Canvas, Video
+
+
 ## [0.14.0] - 2017-10-18
 ### Added
 - WebVR: add sittingToStandingTransform

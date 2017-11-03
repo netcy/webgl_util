@@ -267,7 +267,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
       if (object.visible === false) {
         return;
       }
-      if (!object.glow) {
+      if (!object.glow && !object.transparent) {
         var vao = scene.getVertexArrayObject(object);
         if (vao) {
           self._colorProgram.setUniforms({
