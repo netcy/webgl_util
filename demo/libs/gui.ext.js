@@ -87,6 +87,8 @@ function createGUI (scene) {
   vrFolder.add(scene, 'enterVR').name('Enter VR');
   vrFolder.add(scene, 'exitVR').name('Exit VR');
 
+  gui.add(scene, 'enterFullscreen').name('Full Screen');
+
   function addGUIColor (gui, object, property, name) {
     var orgValue = object['get' + property[0].toUpperCase() + property.substr(1)]();
     gui.addColor(config, property).onChange(function (value) {

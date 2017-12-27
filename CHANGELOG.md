@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.16.0] - 2017-12-27
+### Added
+- Add touch support
+- Add WebVR polyfill
+- WebVR: move and rotate object
+
+
 ## [0.15.0] - 2017-11-03
 ### Added
 - WebVR: add instruction to controller buttons (press menu button)

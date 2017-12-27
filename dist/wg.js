@@ -899,6 +899,47 @@ var Texture = wg.Texture = function (gl, options) {
   self._texture = gl.createTexture();
   self._unit = 0;
 
+  var loadImage = function (url) {
+    if (url instanceof HTMLImageElement ||
+        url instanceof HTMLCanvasElement ||
+        url instanceof HTMLVideoElement) {
+      imageCount--;
+      if (imageCount === 0) {
+        self._imageLoaded = true;
+      }
+      return url;
+    }
+    var image = new Image();
+    gl.initingTextures[url] = image;
+    image.onload = function () {
+      image.onload = null;
+      image.onerror = null;
+      delete gl.initingTextures[url];
+      imageCount--;
+      if (imageCount === 0) {
+        self._imageLoaded = true;
+        gl.cache.textures.trigger.fire({
+          type: 'load',
+          source: self
+        });
+      }
+    };
+    image.onerror = function () {
+      image.onload = null;
+      image.onerror = null;
+      delete gl.initingTextures[url];
+      imageCount--;
+      if (imageCount === 0) {
+        gl.cache.textures.trigger.fire({
+          type: 'error',
+          source: self
+        });
+      }
+    };
+    image.src = url;
+    return image;
+  };
+
   if (url) {
     var imageCount = 1;
     if (options.type === 'CUBE_MAP') {
@@ -909,47 +950,6 @@ var Texture = wg.Texture = function (gl, options) {
       });
     } else {
       self._image = loadImage(url);
-    }
-
-    function loadImage (url) {
-      if (url instanceof HTMLImageElement ||
-          url instanceof HTMLCanvasElement ||
-          url instanceof HTMLVideoElement) {
-        imageCount--;
-        if (imageCount === 0) {
-          self._imageLoaded = true;
-        }
-        return url;
-      }
-      var image = new Image();
-      gl.initingTextures[url] = image;
-      image.onload = function () {
-        image.onload = null;
-        image.onerror = null;
-        delete gl.initingTextures[url];
-        imageCount--;
-        if (imageCount === 0) {
-          self._imageLoaded = true;
-          gl.cache.textures.trigger.fire({
-            type: 'load',
-            source: self
-          });
-        }
-      };
-      image.onerror = function () {
-        image.onload = null;
-        image.onerror = null;
-        delete gl.initingTextures[url];
-        imageCount--;
-        if (imageCount === 0) {
-          gl.cache.textures.trigger.fire({
-            type: 'error',
-            source: self
-          });
-        }
-      };
-      image.src = url;
-      return image;
     }
   }
 };
@@ -1009,6 +1009,7 @@ Texture.prototype.bind = function (unit) {
           );
         }
       } else {
+        // last parameter must be null, can not be undefined, or else iOS throw Type error
         gl.texImage2D(
           type,
           0,
@@ -1018,7 +1019,7 @@ Texture.prototype.bind = function (unit) {
           0,
           gl[options.format || 'RGBA'],
           gl[options.dataType || 'UNSIGNED_BYTE'],
-          options.data
+          options.data || null
         );
       }
     } else {
@@ -1818,7 +1819,7 @@ void main() {
   // http://slides.com/xeolabs/silhouettes-in-webgl#/5
   mat4 mvpMatrix = u_viewProjectMatrix * u_modelMatrix;
   vec4 position = mvpMatrix * a_position;
-  float offset = ((u_outline ? u_outlineWidth : 0.0) + u_outlineGap) * (position.z / 500.0);
+  float offset = ((u_outline ? u_outlineWidth : 0.0) + u_outlineGap) * (position.z / 1000.0);
   gl_Position = mvpMatrix * vec4(a_position.xyz + a_normal * offset, 1.0);
 }
 `;
@@ -1842,7 +1843,7 @@ var OutlineEffect = wg.OutlineEffect = function (scene) {
   self._scene = scene;
   gl = self._gl = scene._gl;
   self._outlineColor = [1, 153/255, 51/255]; // CMYK(0, 40, 80, 0)
-  self._outlineWidth = 4;
+  self._outlineWidth = 2;
   self._outlineGap = 1;
 
   self._program = new Program(gl, {
@@ -2077,6 +2078,9 @@ void main() {
   vec2 texelOffset = u_horizontal ? vec2(u_windowSize.x, 0.0) : vec2(0.0, u_windowSize.y);
 
   for (float i = 0.0; i < BLUR_PASSES; i += 1.0) {
+    if (i >= u_blurAmount) {
+      break;
+    }
     float offset = i - half_blur;
     vec4 tex_color = texture2D(u_sampler, v_uv +
       offset * u_blurScale * texelOffset) * gaussian(offset * strength, deviation);
@@ -2737,6 +2741,7 @@ var Camera = wg.Camera = function (scene) {
   self._rotateY = 0;
 
   canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('touchstart', handleMouseDown);
   canvas.addEventListener('wheel', handleWheel);
   canvas.addEventListener('blur', clean);
   canvas.addEventListener('keydown', handleKeydown);
@@ -2752,9 +2757,14 @@ var Camera = wg.Camera = function (scene) {
     lastPoint = getClientPoint(e);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', clean);
+    window.addEventListener('touchmove', handleMouseMove);
+    window.addEventListener('touchend', clean);
   }
 
   function handleMouseMove(e) {
+    if (self._scene._isPresenting) {
+      return;
+    }
     var point = getClientPoint(e),
       offsetX = point.x - lastPoint.x,
       offsetY = point.y - lastPoint.y,
@@ -3055,7 +3065,7 @@ varying vec3 v_normalView;
 varying vec2 v_uv;
 varying vec4 v_color;
 varying vec3 v_barycentric;
-varying vec4 v_modelPosition;
+// varying vec4 v_modelPosition;
 varying vec4 v_viewPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
@@ -3160,7 +3170,6 @@ var Scene = wg.Scene = function (canvas, options) {
     canvas = document.getElementById(canvas);
   }
 
-  setCanvasSize(canvas);
   self._canvas = canvas;
   self._dirty = true;
   self._objects = [];
@@ -3174,6 +3183,12 @@ var Scene = wg.Scene = function (canvas, options) {
   self._wireframeOnly = true;
   self._enableSSAO = false;
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
+  self._autoResize = false;
+  self._handleResize = function () {
+    self.setSize(window.innerWidth, window.innerHeight);
+  };
+  self.setAutoResize(true);
+  self._handleResize();
 
   var gl = self._gl = canvas.getContext('webgl', options || {
     preserveDrawingBuffer: true,
@@ -3257,15 +3272,15 @@ var Scene = wg.Scene = function (canvas, options) {
     self._outputProgram.setUniforms({
       u_sampler: 0
     });
-    self._framebuffer = new Framebuffer(gl, {
-      width: gl.canvas.width,
-      height: gl.canvas.height,
-      depth: true,
-      stencil: true
-    });
+    // self._framebuffer = new Framebuffer(gl, {
+    //   width: gl.canvas.width,
+    //   height: gl.canvas.height,
+    //   depth: true,
+    //   stencil: true
+    // });
     self._outlineEffect = new OutlineEffect(self);
     self._glowEffect = new GlowEffect(self);
-    self._ssaoEffect = new SSAOEffect(self);
+    // self._ssaoEffect = new SSAOEffect(self);
 
     // self._fxaaEffect = new FxaaEffect(gl);
     // self._fxaaEffect.setEnabled(true);
@@ -3275,8 +3290,12 @@ var Scene = wg.Scene = function (canvas, options) {
       tranMat = mat4.create(),
       viewMatrix = mat4.create(),
       quaternion = quat.create(),
+      translateMatrix = mat4.create(),
+      sittingPosition = vec3.fromValues(0, 1.7, 0),
+      sittingToStandingTransform = mat4.create(),
       cameraPosition = self._camera._position,
       leftGamepad, rightGamepad, pressedGamepad, buttonIndex;
+    mat4.fromTranslation(sittingToStandingTransform, sittingPosition);
     (function render (time) {
       var vrDisplay = self._vrDisplay,
         frameData = self._frameData,
@@ -3284,12 +3303,18 @@ var Scene = wg.Scene = function (canvas, options) {
         canvas = self._canvas,
         clearColor = self._clearColor;
       self._aniamtionId = (vrDisplay || window).requestAnimationFrame(render);
-      gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
       if (vrDisplay && vrDisplay.isPresenting) {
+        gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         vrDisplay.getFrameData(frameData);
         getVRGamepads();
+        if (vrDisplay.stageParameters) {
+          mat4.copy(sittingToStandingTransform, vrDisplay.stageParameters.sittingToStandingTransform);
+        }
+        mat4.fromTranslation(translateMatrix, cameraPosition);
+        refreshGamepadMatrix(leftGamepad);
+        refreshGamepadMatrix(rightGamepad);
         if (pressedGamepad && buttonIndex === 2) {
-          mat4.getRotation(quaternion, vrDisplay.stageParameters.sittingToStandingTransform);
+          mat4.getRotation(quaternion, sittingToStandingTransform);
           quat.multiply(quaternion, quaternion, pressedGamepad.pose.orientation);
           vec3.transformQuat(stepTrans, step, quaternion);
           if (self._camera._lockY) {
@@ -3299,20 +3324,19 @@ var Scene = wg.Scene = function (canvas, options) {
         }
         self.onGamepadChanged(leftGamepad, rightGamepad, pressedGamepad, buttonIndex);
 
-        mat4.fromTranslation(tranMat, cameraPosition);
-        mat4.multiply(tranMat, tranMat, vrDisplay.stageParameters.sittingToStandingTransform);
+        mat4.multiply(tranMat, translateMatrix, sittingToStandingTransform);
         mat4.invert(tranMat, tranMat);
 
-        camera._viewMatrix = frameData.leftViewMatrix;
+        mat4.copy(camera._viewMatrix, frameData.leftViewMatrix);
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
-        camera._projectMatix = frameData.leftProjectionMatrix;
+        mat4.copy(camera._projectMatix, frameData.leftProjectionMatrix);
         self._setViewport(0, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
         self.draw();
 
-        camera._viewMatrix = frameData.rightViewMatrix;
+        mat4.copy(camera._viewMatrix, frameData.rightViewMatrix);
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
-        camera._projectMatix = frameData.rightProjectionMatrix;
+        mat4.copy(camera._projectMatix, frameData.rightProjectionMatrix);
         self._setViewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
         self._dirty = true;
@@ -3321,6 +3345,7 @@ var Scene = wg.Scene = function (canvas, options) {
       } else {
         if (self.onAnimationFrame() !== false) {
           if (time !== 0 && self._dirty) {
+            gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
             self._setViewport(0, 0, canvas.width, canvas.height);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
             self.draw();
@@ -3329,11 +3354,25 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     })(0);
 
+
+    function refreshGamepadMatrix (gamepad) {
+      if (!gamepad || !gamepad.pose.orientation || !gamepad.pose.position) {
+        return;
+      }
+      var matrix = gamepad._matrix || (gamepad._matrix = mat4.create());
+      mat4.fromRotationTranslation(matrix, gamepad.pose.orientation, gamepad.pose.position);
+      mat4.multiply(matrix, sittingToStandingTransform, matrix);
+      mat4.multiply(matrix, translateMatrix, matrix);
+    }
+
     function getVRGamepads() {
       leftGamepad = null;
       rightGamepad = null;
       pressedGamepad = null;
       buttonIndex = -1;
+      if (!navigator.getGamepads) {
+        return;
+      }
       var gamepads = navigator.getGamepads();
       for (var i=0; i<gamepads.length; i++) {
         var gamepad = gamepads[i];
@@ -3575,8 +3614,8 @@ Scene.prototype._initVR = function () {
               var leftEye = vrDisplay.getEyeParameters('left');
               var rightEye = vrDisplay.getEyeParameters('right');
               self._oldSize = {
-                width: canvas.width / window.devicePixelRatio,
-                height: canvas.height / window.devicePixelRatio
+                width: canvas.width,
+                height: canvas.height
               };
               canvas.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
               canvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
@@ -3587,7 +3626,8 @@ Scene.prototype._initVR = function () {
                 canvas.height = self._oldSize.height;
               }
             }
-            self._framebuffer.setSize(canvas.width, canvas.height);
+            self.redraw();
+            // self._framebuffer.setSize(canvas.width, canvas.height);
           };
         }
         window.addEventListener('vrdisplaypresentchange', self.onVRPresentChange, false);
@@ -3719,6 +3759,39 @@ Scene.prototype._handleImageLoaded = function (event) {
 Scene.prototype.dispose = function  () {
   var self = this;
   self._gl.cache.textures.trigger.off('load', self._handleImageLoaded);
+};
+
+Scene.prototype.enterFullscreen = function () {
+  var el = this._canvas;
+  if (el.requestFullscreen) {
+    el.requestFullscreen();
+  } else if (el.mozRequestFullScreen) {
+    el.mozRequestFullScreen();
+  } else if (el.webkitRequestFullscreen) {
+    el.webkitRequestFullscreen();
+  } else if (el.msRequestFullscreen) {
+    el.msRequestFullscreen();
+  }
+};
+
+Scene.prototype.setSize = function (width, height) {
+  var self = this,
+    canvas = self._canvas;
+  setCanvasSize(canvas, width, height);
+  self._camera.setAspect(width / height);
+  self.redraw();
+};
+
+Scene.prototype.setAutoResize = function (autoResize) {
+  var self = this;
+  if (autoResize != self._autoResize) {
+    self._autoResize = autoResize;
+    if (autoResize) {
+      window.addEventListener('resize', self._handleResize);
+    } else {
+      window.removeEventListener('resize', self._handleResize);
+    }
+  }
 };
 
 // Source: src/Object.js

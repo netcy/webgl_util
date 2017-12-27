@@ -16,7 +16,7 @@ void main() {
   // http://slides.com/xeolabs/silhouettes-in-webgl#/5
   mat4 mvpMatrix = u_viewProjectMatrix * u_modelMatrix;
   vec4 position = mvpMatrix * a_position;
-  float offset = ((u_outline ? u_outlineWidth : 0.0) + u_outlineGap) * (position.z / 500.0);
+  float offset = ((u_outline ? u_outlineWidth : 0.0) + u_outlineGap) * (position.z / 1000.0);
   gl_Position = mvpMatrix * vec4(a_position.xyz + a_normal * offset, 1.0);
 }
 `;
@@ -40,7 +40,7 @@ var OutlineEffect = wg.OutlineEffect = function (scene) {
   self._scene = scene;
   gl = self._gl = scene._gl;
   self._outlineColor = [1, 153/255, 51/255]; // CMYK(0, 40, 80, 0)
-  self._outlineWidth = 4;
+  self._outlineWidth = 2;
   self._outlineGap = 1;
 
   self._program = new Program(gl, {

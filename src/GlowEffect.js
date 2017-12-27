@@ -118,6 +118,9 @@ void main() {
   vec2 texelOffset = u_horizontal ? vec2(u_windowSize.x, 0.0) : vec2(0.0, u_windowSize.y);
 
   for (float i = 0.0; i < BLUR_PASSES; i += 1.0) {
+    if (i >= u_blurAmount) {
+      break;
+    }
     float offset = i - half_blur;
     vec4 tex_color = texture2D(u_sampler, v_uv +
       offset * u_blurScale * texelOffset) * gaussian(offset * strength, deviation);

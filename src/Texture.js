@@ -32,6 +32,47 @@ var Texture = wg.Texture = function (gl, options) {
   self._texture = gl.createTexture();
   self._unit = 0;
 
+  var loadImage = function (url) {
+    if (url instanceof HTMLImageElement ||
+        url instanceof HTMLCanvasElement ||
+        url instanceof HTMLVideoElement) {
+      imageCount--;
+      if (imageCount === 0) {
+        self._imageLoaded = true;
+      }
+      return url;
+    }
+    var image = new Image();
+    gl.initingTextures[url] = image;
+    image.onload = function () {
+      image.onload = null;
+      image.onerror = null;
+      delete gl.initingTextures[url];
+      imageCount--;
+      if (imageCount === 0) {
+        self._imageLoaded = true;
+        gl.cache.textures.trigger.fire({
+          type: 'load',
+          source: self
+        });
+      }
+    };
+    image.onerror = function () {
+      image.onload = null;
+      image.onerror = null;
+      delete gl.initingTextures[url];
+      imageCount--;
+      if (imageCount === 0) {
+        gl.cache.textures.trigger.fire({
+          type: 'error',
+          source: self
+        });
+      }
+    };
+    image.src = url;
+    return image;
+  };
+
   if (url) {
     var imageCount = 1;
     if (options.type === 'CUBE_MAP') {
@@ -42,47 +83,6 @@ var Texture = wg.Texture = function (gl, options) {
       });
     } else {
       self._image = loadImage(url);
-    }
-
-    function loadImage (url) {
-      if (url instanceof HTMLImageElement ||
-          url instanceof HTMLCanvasElement ||
-          url instanceof HTMLVideoElement) {
-        imageCount--;
-        if (imageCount === 0) {
-          self._imageLoaded = true;
-        }
-        return url;
-      }
-      var image = new Image();
-      gl.initingTextures[url] = image;
-      image.onload = function () {
-        image.onload = null;
-        image.onerror = null;
-        delete gl.initingTextures[url];
-        imageCount--;
-        if (imageCount === 0) {
-          self._imageLoaded = true;
-          gl.cache.textures.trigger.fire({
-            type: 'load',
-            source: self
-          });
-        }
-      };
-      image.onerror = function () {
-        image.onload = null;
-        image.onerror = null;
-        delete gl.initingTextures[url];
-        imageCount--;
-        if (imageCount === 0) {
-          gl.cache.textures.trigger.fire({
-            type: 'error',
-            source: self
-          });
-        }
-      };
-      image.src = url;
-      return image;
     }
   }
 };
@@ -142,6 +142,7 @@ Texture.prototype.bind = function (unit) {
           );
         }
       } else {
+        // last parameter must be null, can not be undefined, or else iOS throw Type error
         gl.texImage2D(
           type,
           0,
@@ -151,7 +152,7 @@ Texture.prototype.bind = function (unit) {
           0,
           gl[options.format || 'RGBA'],
           gl[options.dataType || 'UNSIGNED_BYTE'],
-          options.data
+          options.data || null
         );
       }
     } else {

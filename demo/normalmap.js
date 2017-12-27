@@ -9,10 +9,6 @@ function init () {
   scene.getCamera().setPosition(0, 0, 4);
   scene.getCamera().setTarget(0, 0, -2);
 
-  wg.ObjParser.parseObjMtlUrl('obj/vive/', 'vr_controller_vive_1_5', function (obj) {
-    wg.Util.addGeometry('vive', obj);
-    scene.redraw();
-  });
   var count = 0;
   scene.onAnimationFrame = function () {
     /*count++;

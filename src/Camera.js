@@ -26,6 +26,7 @@ var Camera = wg.Camera = function (scene) {
   self._rotateY = 0;
 
   canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('touchstart', handleMouseDown);
   canvas.addEventListener('wheel', handleWheel);
   canvas.addEventListener('blur', clean);
   canvas.addEventListener('keydown', handleKeydown);
@@ -41,9 +42,14 @@ var Camera = wg.Camera = function (scene) {
     lastPoint = getClientPoint(e);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', clean);
+    window.addEventListener('touchmove', handleMouseMove);
+    window.addEventListener('touchend', clean);
   }
 
   function handleMouseMove(e) {
+    if (self._scene._isPresenting) {
+      return;
+    }
     var point = getClientPoint(e),
       offsetX = point.x - lastPoint.x,
       offsetY = point.y - lastPoint.y,

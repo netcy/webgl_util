@@ -1,15 +1,25 @@
 <html>
 <head>
   <title>WebGL Demo</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <script src="./libs/OESVertexArrayObject-polyfill.js"></script>
   <script src="./libs/gl-matrix.js"></script>
+  <script>
+    var WebVRConfig = {
+      BUFFER_SCALE: 1.0,
+      DIRTY_SUBMIT_FRAME_BINDINGS: true,
+    };
+  </script>
+
   <script src="./libs/dat.gui.js"></script>
   <script src="./libs/gui.ext.js"></script>
   <script src="../dist/wg.js"></script>
   <script src="./vr.js"></script>
 </head>
 <body onload="init()" style="margin: 0px;">
-  <canvas id="canvas" width="1200" height="500">
+  <canvas id="canvas">
   </canvas>
 </body>
 </html>

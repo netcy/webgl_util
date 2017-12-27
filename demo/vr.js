@@ -8,10 +8,12 @@ var scene, leftController, rightController, selectRay, jumpRay,
   rayPositionStart = vec3.create(),
   rayPositionMiddle = vec3.create(),
   rayPositionEnd = vec3.create(),
-  translateMatrix = mat4.create(),
   rayScale = vec3.fromValues(0.05, 1, 0.05),
   rayOffset = vec3.fromValues(0, 0.5, -0.8),
-  jumping = false;
+  jumping = false,
+  moving = false,
+  startGampadInvertMatrix = mat4.create(),
+  startObjectMatrix = mat4.create();
 
 function init () {
   glMatrix.setMatrixArrayType(Array);
@@ -19,7 +21,7 @@ function init () {
   scene.setClearColor([0, 0, 0, 1]);
   scene.setLightPosition([0, 10, 0]);
   scene.getCamera().setTarget(0, 0, -1);
-  scene.getCamera().setPosition(0, 0, 1);
+  scene.getCamera().setPosition(0, 0, 0);
   scene.getCamera()._lockY = true;
   rayScale[1] = scene.getCamera().getFar();
 
@@ -37,8 +39,6 @@ function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonInde
   jumpRay.visible = false;
   grid.visible = false;
 
-  // set gamepad position and rotation
-  mat4.fromTranslation(translateMatrix, scene._camera._position);
   refreshController(leftController, leftGamepad);
   refreshController(rightController, rightGamepad);
   refreshHelpMenu();
@@ -48,13 +48,12 @@ function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonInde
       jumpRay.visible = true;
       grid.visible = true;
       jumping = true;
-      refreshControllerMatrix(selectRay._modelMatrix, pressedGamepad);
       vec3.set(rayPositionStart, 0, 0, 0);
       vec3.set(rayPositionMiddle, 0, 0, -1);
       vec3.set(rayPositionEnd, 0, 0, -4);
-      vec3.transformMat4(rayPositionStart, rayPositionStart, selectRay._modelMatrix);
-      vec3.transformMat4(rayPositionMiddle, rayPositionMiddle, selectRay._modelMatrix);
-      vec3.transformMat4(rayPositionEnd, rayPositionEnd, selectRay._modelMatrix);
+      vec3.transformMat4(rayPositionStart, rayPositionStart, pressedGamepad._matrix);
+      vec3.transformMat4(rayPositionMiddle, rayPositionMiddle, pressedGamepad._matrix);
+      vec3.transformMat4(rayPositionEnd, rayPositionEnd, pressedGamepad._matrix);
       var jumpRayPosition = [
         rayPositionStart[0], rayPositionStart[1], rayPositionStart[2],
         rayPositionMiddle[0], Math.max(rayPositionMiddle[1], 0), rayPositionMiddle[2],
@@ -62,11 +61,22 @@ function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonInde
       ];
       jumpRay.vao.setPosition(jumpRayPosition);
     } else if (buttonIndex === 1) {
-      refreshController(selectRay, pressedGamepad);
+      /*refreshController(selectRay, pressedGamepad);
       var modelMatrix = selectRay._modelMatrix;
+      // TODO: refresh normalMatrix
       mat4.rotateX(modelMatrix, modelMatrix, -Math.PI * 0.5);
       mat4.scale(modelMatrix, modelMatrix, rayScale);
-      mat4.translate(modelMatrix, modelMatrix, rayOffset);
+      mat4.translate(modelMatrix, modelMatrix, rayOffset);*/
+      if (moving) {
+        var matrix = cube._modelMatrix;
+        // TODO: refresh normalMatrix
+        mat4.mul(matrix, pressedGamepad._matrix, startGampadInvertMatrix);
+        mat4.mul(matrix, matrix, startObjectMatrix);
+      } else {
+        moving = true;
+        mat4.invert(startGampadInvertMatrix, pressedGamepad._matrix);
+        mat4.copy(startObjectMatrix, cube._modelMatrix);
+      }
     } else if (buttonIndex === 3) {
       helpMenuGamepad = pressedGamepad;
       pressedHelpMenu = true;
@@ -74,14 +84,17 @@ function onGamepadChanged (leftGamepad, rightGamepad, pressedGamepad, buttonInde
   } else {
     if (jumping) {
       jumping = false;
-      scene._camera._position[0] = rayPositionEnd[0];
-      scene._camera._position[2] = rayPositionEnd[2];
+      var posePosition = scene._frameData.pose.position;
+      var sittingMatrix = scene._vrDisplay.stageParameters.sittingToStandingTransform;
+      scene._camera._position[0] = rayPositionEnd[0] - posePosition[0] - sittingMatrix[12];
+      scene._camera._position[2] = rayPositionEnd[2] - posePosition[2] - sittingMatrix[14];
     }
     if (pressedHelpMenu) {
       pressedHelpMenu = false;
       helpMenuVisible = !helpMenuVisible;
       refreshHelpMenu();
     }
+    moving = false;
   }
 }
 
@@ -91,8 +104,9 @@ function refreshHelpMenu () {
   });
   if (helpMenuVisible) {
     helpMenus.forEach(function (helpMenu) {
-      refreshControllerMatrix(helpMenu._modelMatrix, helpMenuGamepad);
       var modelMatrix = helpMenu._modelMatrix;
+      // TODO: refresh normalMatrix
+      mat4.copy(modelMatrix, helpMenuGamepad._matrix);
       mat4.translate(modelMatrix, modelMatrix, helpMenu._position);
       mat4.rotateX(modelMatrix, modelMatrix, helpMenu._rotation[0]);
       mat4.scale(modelMatrix, modelMatrix, helpMenu._scale);
@@ -102,17 +116,12 @@ function refreshHelpMenu () {
 
 function refreshController (object, gampad) {
   if (gampad) {
-    refreshControllerMatrix(object._modelMatrix, gampad);
+    mat4.copy(object._modelMatrix, gampad._matrix);
+    // TODO: refresh normalMatrix
     object.visible = true;
   } else {
     object.visible = false;
   }
-}
-
-function refreshControllerMatrix (matrix, gampad) {
-  mat4.fromRotationTranslation(matrix, gampad.pose.orientation, gampad.pose.position);
-  mat4.multiply(matrix, scene._vrDisplay.stageParameters.sittingToStandingTransform, matrix);
-  mat4.multiply(matrix, translateMatrix, matrix);
 }
 
 function addHelpMenus () {
@@ -167,17 +176,18 @@ function createHelpMenu (text, translate, from, to) {
 }
 
 function addData () {
-  var cube = new wg.Object();
+  var cube = window.cube = new wg.Object();
   cube.type = 'cube';
-  cube.glow = true;
+  cube.outline = true;
   cube.image = 'images/crate.gif';
   cube.setPosition(-2, 0, 0);
   scene.add(cube);
 
   var sphere = new wg.Object();
   sphere.type = 'sphere';
+  sphere.glow = true;
   sphere.color = [0.6, 0.6, 0.6, 1];
-  sphere.setPosition(2, 0, 0);
+  sphere.setPosition(0, 0, -2);
   scene.add(sphere);
 
   leftController = new wg.Object();
