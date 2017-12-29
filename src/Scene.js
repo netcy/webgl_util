@@ -12,6 +12,7 @@ attribute vec3 a_barycentric;
 
 uniform mat4 u_modelViewProjectMatrix;
 uniform mat4 u_modelViewMatrix;
+uniform mat4 u_modelMatrix;
 uniform mat4 u_viewMatrix;
 uniform mat3 u_normalMatrix;
 uniform mat3 u_normalViewMatrix;
@@ -29,6 +30,7 @@ varying vec4 v_modelPosition;
 varying vec4 v_viewPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
+varying vec4 v_woldPosition;
 
 void main () {
   vec4 position = vec4(a_position, 1.0);
@@ -40,6 +42,7 @@ void main () {
   v_barycentric = a_barycentric;
   v_modelPosition = position;
   v_viewPosition = u_viewMatrix * position;
+  v_woldPosition = u_modelMatrix * position;
 
   vec3 viewPosition = (u_modelViewMatrix * position).xyz;
   v_lightDirection = u_lightPosition - viewPosition;
@@ -65,6 +68,8 @@ var FRAGMENT_SHADER_SCENE = `
   precision highp float;
 #endif
 
+
+#define CLIPPLANE
 
 uniform vec3 u_lightColor;
 uniform vec3 u_ambientColor;
@@ -93,6 +98,12 @@ varying vec3 v_barycentric;
 varying vec4 v_viewPosition;
 varying vec3 v_lightDirection;
 varying vec3 v_eyeDirection;
+varying vec4 v_woldPosition;
+
+#ifdef CLIPPLANE
+  uniform vec4 u_clipPlane;
+  varying float v_clipDistance;
+#endif
 
 float edgeFactor () {
   vec3 d = fwidth(v_barycentric);
@@ -115,6 +126,12 @@ float edgeFactor (vec3 parameter) {
 }*/
 
 void main () {
+  #ifdef CLIPPLANE
+    float clipDistance = dot(v_woldPosition.xyz, u_clipPlane.xyz);
+    if (clipDistance > u_clipPlane.w) {
+      discard;
+    }
+  #endif
   if (u_wireframe && u_wireframeOnly) {
     // gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor(v_modelPosition.xyz * 500.0)));
     gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
@@ -208,6 +225,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._enableSSAO = false;
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
   self._autoResize = false;
+  self._clipPane = [0, 0, 0, 0];
   self._handleResize = function () {
     self.setSize(window.innerWidth, window.innerHeight);
   };
@@ -267,7 +285,7 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    gl.enable(gl.CULL_FACE);
+    // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
@@ -466,6 +484,7 @@ Scene.prototype.draw = function () {
     u_samplerCubeImage: 2,
     u_samplerEnv: 3,
     u_viewMatrix: camera.getViewMatrix(),
+    u_clipPlane: self._clipPane
   });
 
   gl.disable(gl.BLEND);
@@ -517,6 +536,7 @@ Scene.prototype.draw = function () {
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
       sceneProgram.setUniforms({
+        u_modelMatrix: object._modelMatrix,
         u_normalMatrix: object._normalMatrix,
         u_normalViewMatrix: object._normalViewMatrix,
         u_modelViewInvMatrix: object._modelViewInvMatrix,
@@ -773,6 +793,15 @@ Scene.prototype.getEnableSSAO = function () {
 
 Scene.prototype.setEnableSSAO = function (enableSSAO) {
   this._enableSSAO = enableSSAO;
+  this.redraw();
+};
+
+Scene.prototype.getClipPane = function () {
+  return this._clipPane;
+};
+
+Scene.prototype.setClipPane = function (clipPane) {
+  this._clipPane = clipPane;
   this.redraw();
 };
 

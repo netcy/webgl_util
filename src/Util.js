@@ -1,6 +1,6 @@
 var wg = root.wg = {};
 var Util = wg.Util = {
-  version: '0.16.0'
+  version: '0.17.0'
 };
 
 var getClientPoint = Util.getClientPoint = function (e) {

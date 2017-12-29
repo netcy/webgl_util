@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.17.0] - 2017-12-29
+### Added
+- Add Scene#clipPane
+
+
 ## [0.16.0] - 2017-12-27
 ### Added
 - Add touch support

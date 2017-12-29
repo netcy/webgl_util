@@ -11,11 +11,11 @@ function init () {
   scene.getCamera().setFovy(60);
   scene.getCamera().setNear(0.1);
   scene.getCamera().setFar(20);
-  scene.getCamera().setTarget(0, 0.4, 0);
-  scene.getCamera().setPosition(0, 2, 3.9);
+  scene.getCamera().setTarget(0, 0, 0);
+  scene.getCamera().setPosition(0, 0, 4);
   scene.setClearColor([1, 1, 1, 0]);
-  scene.setLightPosition([0.0, 4.0, 0.0]);
-  scene.setAmbientColor([0.4, 0.4, 0.4]);
+  scene.setLightPosition([4.0, 4.0, 4.0]);
+  // scene.setAmbientColor([0.4, 0.4, 0.4]);
 
   var gui = createGUI(scene);
 
@@ -79,7 +79,7 @@ function init () {
   cube2.glow = true;
   scene.add(cube2);*/
 
-  var count = 4;
+  /*var count = 4;
   var current = count;
   var scale = 0.4;
   var spread = scale * 2.0;
@@ -102,11 +102,11 @@ function init () {
     if ( current == 0 )
       current = 1;
     halfCount = (current - 1.0) * 0.5 * spread;
-  }
+  }*/
 
   var box = new wg.Cube();
-  box.setScale(8.0, 4.0, 8.0);
-  box.setPosition(0.0, 1.7, 0.0);
+  // box.setScale(1.0, 1.0, 1.0);
+  // box.setPosition(0.0, 1.7, 0.0);
   // vec2.set(box.textureScale, 100, 100);
   // box.setScale(100, 100, 100);
   // box.image = {

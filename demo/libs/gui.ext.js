@@ -11,7 +11,7 @@ function createGUI (scene) {
     outlineColor: convertGLColorToRGB(scene._outlineEffect.getOutlineColor()),
   };
   var sceneFolder = gui.addFolder('Scene');
-  addGUIColor(sceneFolder, scene, 'clearColor', 'Clear Color');
+  addGUIColor(sceneFolder, config, scene, 'clearColor', 'Clear Color');
   sceneFolder
     .add(config, 'clearAlpha', 0, 255, 1)
     .name('Clear Alpha')
@@ -20,13 +20,13 @@ function createGUI (scene) {
       scene.getClearColor()[3] = value;
       scene.setClearColor(scene.getClearColor());
   });
-  addGUIColor(sceneFolder, scene, 'ambientColor', 'Ambient Color');
-  addGUIColor(sceneFolder, scene, 'lightColor', 'Light Color');
-  addGUIPosition(sceneFolder, scene, 'lightPosition', 'Light Position');
+  addGUIColor(sceneFolder, config, scene, 'ambientColor', 'Ambient Color');
+  addGUIColor(sceneFolder, config, scene, 'lightColor', 'Light Color');
+  addGUIPosition(sceneFolder, config, scene, 'lightPosition', 'Light Position');
   addGUIValue(sceneFolder, scene, 'enableSSAO', 'Enable SSAO');
 
   var wireframeFolder = sceneFolder.addFolder('Wireframe');
-  addGUIColor(wireframeFolder, scene, 'wireframeColor', 'Color');
+  addGUIColor(wireframeFolder, config, scene, 'wireframeColor', 'Color');
   addGUIValue(wireframeFolder, scene, 'wireframeWidth', 'Width', {
     min: 0,
     max: 5.0,
@@ -34,18 +34,20 @@ function createGUI (scene) {
   });
   addGUIValue(wireframeFolder, scene, 'wireframeOnly', 'Only');
 
+  addGUIPosition4(sceneFolder, config, scene, 'clipPane', 'Clip Pane');
+
   var cameraFolder = gui.addFolder('Camera');
   var camera = scene.getCamera();
   // TODO update gui value when scene changed
-  addGUIPosition(cameraFolder, camera, 'position', 'Position');
-  addGUIPosition(cameraFolder, camera, 'target', 'Target');
+  addGUIPosition(cameraFolder, config, camera, 'position', 'Position');
+  addGUIPosition(cameraFolder, config, camera, 'target', 'Target');
   addGUIValue(cameraFolder, camera, 'near', 'Near');
   addGUIValue(cameraFolder, camera, 'far', 'Far');
   addGUIValue(cameraFolder, camera, 'fovy', 'Fovy');
 
   var glowFolder = gui.addFolder('Glow');
   var glowEffect = scene._glowEffect;
-  addGUIColor(glowFolder, glowEffect, 'glowColor', 'Glow Color');
+  addGUIColor(glowFolder, config, glowEffect, 'glowColor', 'Glow Color');
   addGUIValue(glowFolder, glowEffect, 'blurAmount', 'Blur Amount', {
     min: 0,
     max: 20,
@@ -71,7 +73,7 @@ function createGUI (scene) {
 
   var outlineFolder = gui.addFolder('Outline');
   var outlineEffect = scene._outlineEffect;
-  addGUIColor(outlineFolder, outlineEffect, 'outlineColor', 'outline Color');
+  addGUIColor(outlineFolder, config, outlineEffect, 'outlineColor', 'outline Color');
   addGUIValue(outlineFolder, outlineEffect, 'outlineWidth', 'Outline Width', {
     min: 0,
     max: 20,
@@ -89,7 +91,7 @@ function createGUI (scene) {
 
   gui.add(scene, 'enterFullscreen').name('Full Screen');
 
-  function addGUIColor (gui, object, property, name) {
+  function addGUIColor (gui, config, object, property, name) {
     var orgValue = object['get' + property[0].toUpperCase() + property.substr(1)]();
     gui.addColor(config, property).onChange(function (value) {
       value = convertRGBToGLColor(value);
@@ -100,12 +102,29 @@ function createGUI (scene) {
     }).name(name);
   }
 
-  function addGUIPosition (gui, object, property, name) {
+  function addGUIPosition (gui, config, object, property, name) {
     var positionFoler = gui.addFolder(name);
     var orgValue = object['get' + property[0].toUpperCase() + property.substr(1)]();
     addPosition('x', 0);
     addPosition('y', 1);
     addPosition('z', 2);
+
+    function addPosition (name, index) {
+      config[property + '_' + name] = orgValue[index];
+      positionFoler.add(config, property + '_' + name).onChange(function (value) {
+        orgValue[index] = value;
+        object['set' + property[0].toUpperCase() + property.substr(1)](orgValue);
+      }).name(name);
+    }
+  }
+
+  function addGUIPosition4 (gui, config, object, property, name) {
+    var positionFoler = gui.addFolder(name);
+    var orgValue = object['get' + property[0].toUpperCase() + property.substr(1)]();
+    addPosition('x', 0);
+    addPosition('y', 1);
+    addPosition('z', 2);
+    addPosition('d', 3);
 
     function addPosition (name, index) {
       config[property + '_' + name] = orgValue[index];
