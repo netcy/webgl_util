@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Webgl Instance</title>
+  <script src="../libs/OESVertexArrayObject-polyfill.js"></script>
+  <script src="../libs/gl-matrix.js"></script>
+  <script src="../libs/dat.gui.js"></script>
+  <script src="../../dist/wg.js"></script>
+  <script>
+'use strict';
+
+var VERTEX_SHADER_SOURCE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+attribute vec3 a_position;
+attribute vec4 a_color;
+
+varying vec4 v_color;
+
+void main () {
+  gl_Position = vec4(a_position, 1.0);
+  v_color = a_color;
+}
+`;
+
+var FRAGMENT_SHADER_SOURCE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+varying vec4 v_color;
+
+void main () {
+  gl_FragColor = v_color;
+}
+`;
+
+var dirty = true,
+  program, vao;
+
+function init () {
+  wg.Util.initWebGL(document.getElementById('canvas'), {
+    antialias: false
+  }, initWebGL);
+}
+
+function initWebGL(gl) {
+  window.gl = gl;
+  gl.cache = { textures: new wg.TextureCache(gl) };
+  gl.cache.textures.trigger.on('load', function () {
+    dirty = true;
+  });
+  gl.enable(gl.CULL_FACE);
+  gl.enable(gl.DEPTH_TEST);
+
+  program = new wg.Program(gl, {
+    vertex: VERTEX_SHADER_SOURCE,
+    fragment: FRAGMENT_SHADER_SOURCE
+  });
+
+  vao = new wg.VertexArrayObject(gl, {
+    buffers: {
+      position: [
+        1.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        1.0, -1.0, 0.0,
+        1.0, 1.0, 0.0
+      ],
+      color: [
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 1.0,
+        0.0, 0.0, 1.0, 1.0,
+        0.0, 0.0, 1.0, 1.0
+      ]
+    }
+  });
+
+  (function render() {
+    gl._aniamtionId = requestAnimationFrame(render);
+    if (dirty) {
+      draw(gl);
+    }
+  })();
+}
+
+function draw(gl) {
+  if (!dirty) {
+    return;
+  }
+
+  dirty = false;
+  program.use();
+  vao.draw();
+}
+
+function dispose () {
+  cancelAnimationFrame(gl._aniamtionId);
+  program.dispose();
+  vao.dispose();
+  gl = null;
+  program = null;
+  vao = null;
+  window.wg = null;
+  document.body.removeChild(canvas);
+}
+  </script>
+</head>
+<body onload="init()">
+  <canvas id="canvas" width="1024" height="512">
+  </canvas>
+</body>
+</html>

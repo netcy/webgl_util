@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Webgl Instance</title>
+  <script src="../libs/OESVertexArrayObject-polyfill.js"></script>
+  <script src="../libs/gl-matrix.js"></script>
+  <script src="../libs/dat.gui.js"></script>
+  <script src="../../dist/wg.js"></script>
+  <script>
+'use strict';
+
+var VERTEX_SHADER_SOURCE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+attribute vec3 a_position;
+attribute vec4 a_color;
+attribute mat4 a_offset;
+
+varying vec4 v_color;
+
+void main () {
+  gl_Position = a_offset * vec4(a_position * vec3(0.5, 0.5, 1.0), 1.0);
+  v_color = a_color;
+}
+`;
+
+var FRAGMENT_SHADER_SOURCE = `
+#ifdef GL_ES
+  precision highp float;
+#endif
+
+varying vec4 v_color;
+
+void main () {
+  gl_FragColor = v_color;
+}
+`;
+
+var dirty = true,
+  program, vao1, vao2;
+
+function init () {
+  wg.Util.initWebGL(document.getElementById('canvas'), {
+    antialias: false
+  }, initWebGL);
+}
+
+function initWebGL(gl) {
+  window.gl = gl;
+  gl.cache = { textures: new wg.TextureCache(gl) };
+  gl.cache.textures.trigger.on('load', function () {
+    dirty = true;
+  });
+  gl.enable(gl.CULL_FACE);
+  gl.enable(gl.DEPTH_TEST);
+
+  program = new wg.Program(gl, {
+    vertex: VERTEX_SHADER_SOURCE,
+    fragment: FRAGMENT_SHADER_SOURCE
+  });
+
+  var offset1 = mat4.create();
+  mat4.translate(offset1, offset1, [-0.5, 0.5, 0.0]);
+  mat4.rotateY(offset1, offset1, Math.PI / 6);
+  var offset2 = mat4.create();
+  mat4.fromTranslation(offset2, [0.5, 0.5, 0.0]);
+  var offsetAll1 = new Float32Array(16 * 2);
+  offsetAll1.set(offset1, 0);
+  offsetAll1.set(offset2, 16);
+
+  vao1 = new wg.VertexArrayObject(gl, {
+    buffers: {
+      position: [
+        1.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        1.0, -1.0, 0.0,
+        1.0, 1.0, 0.0
+      ],
+      color: [
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 1.0,
+        0.0, 0.0, 1.0, 1.0,
+        0.0, 0.0, 1.0, 1.0
+      ],
+      offset: offsetAll1
+    },
+    instancedAttrs: ['offset']
+  });
+
+  vao2 = new wg.VertexArrayObject(gl, {
+    buffers: {
+      position: [
+        1.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        1.0, -1.0, 0.0,
+        1.0, 1.0, 0.0
+      ],
+      color: [
+        1.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0,
+        0.0, 1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0
+      ]
+    }
+  });
+
+  var offset1 = mat4.create();
+  mat4.fromTranslation(offset1, [-0.5, -0.5, 0.0]);
+  var offset2 = mat4.create();
+  mat4.fromTranslation(offset2, [0.5, -0.5, 0.0]);
+  var offsetAll2 = new Float32Array(16 * 2);
+  offsetAll2.set(offset1, 0);
+  offsetAll2.set(offset2, 16);
+
+  vao2.setBufferDatas('offset', offsetAll2, true);
+
+  (function render() {
+    gl._aniamtionId = requestAnimationFrame(render);
+    if (dirty) {
+      draw(gl);
+    }
+  })();
+}
+
+function draw(gl) {
+  if (!dirty) {
+    return;
+  }
+
+  dirty = false;
+  program.use();
+  vao1.draw();
+  vao2.draw();
+}
+  </script>
+</head>
+<body onload="init()">
+  <canvas id="canvas" width="1024" height="512">
+  </canvas>
+</body>
+</html>

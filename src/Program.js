@@ -6,6 +6,7 @@ var attributesMap = {
   tangent: { index: 4, size: 3 },
   bitangent: { index: 5, size: 3 },
   barycentric: { index: 6, size: 3 },
+  offset: { index: 7, size: 16 },
 };
 
 var Program = wg.Program = function (gl, options) {

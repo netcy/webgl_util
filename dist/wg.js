@@ -32,6 +32,7 @@ Util.initWebGL = function (canvas, options, callback) {
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
+  addInstancedArraysSupport(gl);
   // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
   gl.getExtension('OES_standard_derivatives');
   // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
@@ -92,23 +93,23 @@ function addVertexArrayObjectSupport (gl) {
   // https://github.com/greggman/oes-vertex-array-object-polyfill
   if (!gl.createVertexArray) {
     var ext = gl.getExtension("OES_vertex_array_object");
-    if (!ext) {
-      ext = new OESVertexArrayObject(gl);
-    }
     if (ext) {
-      gl.createVertexArray = function () {
-        return ext.createVertexArrayOES();
-      };
-      gl.deleteVertexArray = function (v) {
-        ext.deleteVertexArrayOES(v);
-      };
-      gl.isVertexArray = function (v) {
-        return ext.isVertexArrayOES(v);
-      };
-      gl.bindVertexArray = function (v) {
-        ext.bindVertexArrayOES(v);
-      };
+      gl.createVertexArray = ext.createVertexArrayOES.bind(ext);
+      gl.deleteVertexArray = ext.deleteVertexArrayOES.bind(ext);
+      gl.isVertexArray = ext.isVertexArrayOES.bind(ext);
+      gl.bindVertexArray = ext.bindVertexArrayOES.bind(ext);
       gl.VERTEX_ARRAY_BINDING = ext.VERTEX_ARRAY_BINDING_OES;
+    }
+  }
+}
+
+function addInstancedArraysSupport (gl) {
+  if (!gl.drawArraysInstanced) {
+    var ext = gl.getExtension("ANGLE_instanced_arrays");
+    if (ext) {
+      gl.drawArraysInstanced = ext.drawArraysInstancedANGLE.bind(ext);
+      gl.drawElementsInstanced = ext.drawElementsInstancedANGLE.bind(ext);
+      gl.vertexAttribDivisor = ext.vertexAttribDivisorANGLE.bind(ext);
     }
   }
 }
@@ -596,6 +597,7 @@ var attributesMap = {
   tangent: { index: 4, size: 3 },
   bitangent: { index: 5, size: 3 },
   barycentric: { index: 6, size: 3 },
+  offset: { index: 7, size: 16 },
 };
 
 var Program = wg.Program = function (gl, options) {
@@ -1152,7 +1154,8 @@ TextureCache.prototype.get = function (image) {
  * @example
  *     buffers: { position: [], normal: [], uv: [], color: [], index: [] },
  *     offset: 0,
- *     mode: 'TRIANGLES'
+ *     mode: 'TRIANGLES',
+ *     instancedAttrs: null // ['offset']
  */
 var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
   var self = this,
@@ -1168,14 +1171,14 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
     if (!attribute && attrName !== 'index') {
       return;
     }
-    var buffer = buffers[attrName];
+    var bufferData = buffers[attrName];
     var bufferObject = gl.createBuffer();
     self._bufferMap[attrName] = bufferObject;
     var element_type, element_size, array;
 
     if (attrName === 'position') {
       if (!self._index) {
-        self._count = buffer.length / attribute.size;
+        self._count = bufferData.length / attribute.size;
       }
     }
 
@@ -1187,54 +1190,97 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
       self._index = true;
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufferObject);
 
-      if (buffer.length <= 256) {
+      if (bufferData.length <= 256) {
         element_type = 5121; // WebGLRenderingContext.UNSIGNED_BYTE
         element_size = 1;
-        array = new Uint8Array(buffer);
-      } else if (buffer.length <= 65536) {
+        array = new Uint8Array(bufferData);
+      } else if (bufferData.length <= 65536) {
         element_type = 5123; // WebGLRenderingContext.UNSIGNED_SHORT
         element_size = 2;
-        array = new Uint16Array(buffer);
+        array = new Uint16Array(bufferData);
       } else {
         // TODO check gl.getExtension('OES_element_index_uint');
         element_type = 5125; // WebGLRenderingContext.UNSIGNED_INT
         element_size = 4;
-        array = new Uint32Array(buffer);
+        array = new Uint32Array(bufferData);
       }
       self._element_type = element_type;
       self._element_size = element_size;
-      self._count = buffer.length;
+      self._count = bufferData.length;
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
     } else {
       gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(buffer), gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(attribute.index);
-      // index, size, type, normalized, stride, offset
-      gl.vertexAttribPointer(attribute.index, attribute.size, gl.FLOAT, false, 0, 0);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
+      self._setBufferOptions(attribute, bufferData, options.instancedAttrs && options.instancedAttrs.indexOf(attrName) >= 0);
     }
   });
   gl.bindVertexArray(null);
 
   self._offset = options.offset || 0;
   self._mode = gl[options.mode || 'TRIANGLES'];
-  self._buffers = options.buffers;
+  self._parts = options.buffers.parts;
 };
 
-VertexArrayObject.prototype.setPosition = function (position) {
+VertexArrayObject.prototype.setPosition = function (datas) {
+  this.setBufferDatas('position', datas);
+};
+
+VertexArrayObject.prototype.setBufferDatas = function (name, datas, instanced) {
   var self = this,
-    gl = self._gl;
+    gl = self._gl,
+    bufferObject, attribute;
   gl.bindVertexArray(self._vao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, self._bufferMap['position']);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(position), gl.STATIC_DRAW);
+  bufferObject = self._bufferMap[name];
+  if (!bufferObject) {
+    attribute = attributesMap[name];
+    if (!attribute) {
+      console.error('Unknown attribute: ' + name);
+    }
+    self._bufferMap[name] = bufferObject = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(datas), gl.STATIC_DRAW);
+    self._setBufferOptions(attribute, datas, instanced);
+  } else {
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(datas), gl.STATIC_DRAW);
+  }
+};
+
+VertexArrayObject.prototype._setBufferOptions = function (attribute, datas, instanced) {
+  //https://stackoverflow.com/questions/38853096/webgl-how-to-bind-values-to-a-mat4-attribute
+  var self = this,
+    gl = self._gl,
+    attributeCount, i;
+  if (attribute.size > 4) {
+    attributeCount = attribute.size / 4;
+    for (i = 0; i < attributeCount; i++) {
+      gl.enableVertexAttribArray(attribute.index + i);
+      gl.vertexAttribPointer(attribute.index + i, 4, gl.FLOAT, false, 4 * attribute.size, 16 * i);
+      if (instanced) {
+        gl.vertexAttribDivisor(attribute.index + i, 1);
+      }
+    }
+  } else {
+    gl.enableVertexAttribArray(attribute.index);
+    // index, size, type, normalized, stride, offset
+    gl.vertexAttribPointer(attribute.index, attribute.size, gl.FLOAT, false, 0, 0);
+    if (instanced) {
+      gl.vertexAttribDivisor(attribute.index, 1);
+    }
+  }
+  if (instanced) {
+    self._instanceCount = datas.length / attribute.size;
+  }
 };
 
 VertexArrayObject.prototype.draw = function (preDrawCallback) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
-  if (self._buffers.parts) {
-    self._buffers.parts.forEach(function (part) {
+  if (self._parts) {
+    self._parts.forEach(function (part) {
       preDrawCallback && preDrawCallback(part);
+      // TODO instance
       part.counts.forEach(function (item) {
         if (self._index) {
           gl.drawElements(self._mode, item.count, self._element_type, item.offset * self._element_size);
@@ -1244,17 +1290,31 @@ VertexArrayObject.prototype.draw = function (preDrawCallback) {
       });
     });
   } else {
-    if (self._index) {
-       // mode, count, type, offset
-      gl.drawElements(self._mode, self._count, self._element_type, self._offset * self._element_size);
+    // TODO check if draw*Instanced is supported
+    if (self._instanceCount) {
+      if (self._index) {
+        // mode, count, type, offset, instanceCount
+        gl.drawElementsInstanced(self._mode, self._count, self._element_type, self._offset * self._element_size, self._instanceCount);
+      } else {
+        // mode, first, count, instanceCount
+        gl.drawArraysInstanced(self._mode, self._offset, self._count, self._instanceCount);
+      }
     } else {
-      gl.drawArrays(self._mode, self._offset, self._count);
+      if (self._index) {
+        // mode, count, type, offset
+        gl.drawElements(self._mode, self._count, self._element_type, self._offset * self._element_size);
+      } else {
+        gl.drawArrays(self._mode, self._offset, self._count);
+      }
     }
   }
 };
 
 VertexArrayObject.prototype.dispose = function () {
   var self = this;
+  Object.keys(self._bufferMap).forEach(function (key) {
+    self._gl.deleteBuffer(self._bufferMap[key]);
+  });
   self._gl.deleteVertexArray(self._vao);
   self._vao = null;
   self._bufferMap = {};
@@ -3079,7 +3139,6 @@ varying vec4 v_woldPosition;
 
 #ifdef CLIPPLANE
   uniform vec4 u_clipPlane;
-  varying float v_clipDistance;
 #endif
 
 float edgeFactor () {

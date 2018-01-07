@@ -29,6 +29,7 @@ Util.initWebGL = function (canvas, options, callback) {
     stencil: true
   });
   addVertexArrayObjectSupport(gl);
+  addInstancedArraysSupport(gl);
   // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
   gl.getExtension('OES_standard_derivatives');
   // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
@@ -89,23 +90,23 @@ function addVertexArrayObjectSupport (gl) {
   // https://github.com/greggman/oes-vertex-array-object-polyfill
   if (!gl.createVertexArray) {
     var ext = gl.getExtension("OES_vertex_array_object");
-    if (!ext) {
-      ext = new OESVertexArrayObject(gl);
-    }
     if (ext) {
-      gl.createVertexArray = function () {
-        return ext.createVertexArrayOES();
-      };
-      gl.deleteVertexArray = function (v) {
-        ext.deleteVertexArrayOES(v);
-      };
-      gl.isVertexArray = function (v) {
-        return ext.isVertexArrayOES(v);
-      };
-      gl.bindVertexArray = function (v) {
-        ext.bindVertexArrayOES(v);
-      };
+      gl.createVertexArray = ext.createVertexArrayOES.bind(ext);
+      gl.deleteVertexArray = ext.deleteVertexArrayOES.bind(ext);
+      gl.isVertexArray = ext.isVertexArrayOES.bind(ext);
+      gl.bindVertexArray = ext.bindVertexArrayOES.bind(ext);
       gl.VERTEX_ARRAY_BINDING = ext.VERTEX_ARRAY_BINDING_OES;
+    }
+  }
+}
+
+function addInstancedArraysSupport (gl) {
+  if (!gl.drawArraysInstanced) {
+    var ext = gl.getExtension("ANGLE_instanced_arrays");
+    if (ext) {
+      gl.drawArraysInstanced = ext.drawArraysInstancedANGLE.bind(ext);
+      gl.drawElementsInstanced = ext.drawElementsInstancedANGLE.bind(ext);
+      gl.vertexAttribDivisor = ext.vertexAttribDivisorANGLE.bind(ext);
     }
   }
 }

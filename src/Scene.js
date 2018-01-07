@@ -102,7 +102,6 @@ varying vec4 v_woldPosition;
 
 #ifdef CLIPPLANE
   uniform vec4 u_clipPlane;
-  varying float v_clipDistance;
 #endif
 
 float edgeFactor () {

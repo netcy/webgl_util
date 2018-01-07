@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.18.0] - 2018-01-07
+### Added
+- Add instanced support
+
+
 ## [0.17.0] - 2017-12-29
 ### Added
 - Add Scene#clipPane
