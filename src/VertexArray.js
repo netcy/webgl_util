@@ -1,5 +1,5 @@
 /**
- * VertexArrayObject
+ * VertexArray
  * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
@@ -8,7 +8,7 @@
  *     mode: 'TRIANGLES',
  *     instancedAttrs: null // ['offset']
  */
-var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
+var VertexArray = wg.VertexArray = function (gl, options) {
   var self = this,
     buffers = options.buffers;
 
@@ -72,11 +72,11 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
   self._parts = options.buffers.parts;
 };
 
-VertexArrayObject.prototype.setPosition = function (datas) {
+VertexArray.prototype.setPosition = function (datas) {
   this.setBufferDatas('position', datas);
 };
 
-VertexArrayObject.prototype.setBufferDatas = function (name, datas, instanced) {
+VertexArray.prototype.setBufferDatas = function (name, datas, instanced) {
   var self = this,
     gl = self._gl,
     bufferObject, attribute;
@@ -97,7 +97,7 @@ VertexArrayObject.prototype.setBufferDatas = function (name, datas, instanced) {
   }
 };
 
-VertexArrayObject.prototype._setBufferOptions = function (attribute, datas, instanced) {
+VertexArray.prototype._setBufferOptions = function (attribute, datas, instanced) {
   //https://stackoverflow.com/questions/38853096/webgl-how-to-bind-values-to-a-mat4-attribute
   var self = this,
     gl = self._gl,
@@ -124,7 +124,7 @@ VertexArrayObject.prototype._setBufferOptions = function (attribute, datas, inst
   }
 };
 
-VertexArrayObject.prototype.draw = function (preDrawCallback) {
+VertexArray.prototype.draw = function (preDrawCallback) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
@@ -161,7 +161,7 @@ VertexArrayObject.prototype.draw = function (preDrawCallback) {
   }
 };
 
-VertexArrayObject.prototype.dispose = function () {
+VertexArray.prototype.dispose = function () {
   var self = this;
   Object.keys(self._bufferMap).forEach(function (key) {
     self._gl.deleteBuffer(self._bufferMap[key]);

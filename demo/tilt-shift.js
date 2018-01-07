@@ -52,7 +52,7 @@ function initWebGL(gl) {
   gl.cache.textures.trigger.on('load', function () {
     dirty = true;
   });
-  gl.cache.quadVao = new wg.VertexArrayObject(gl, {
+  gl.cache.quadVao = new wg.VertexArray(gl, {
     buffers: {
       position: [
         1.0, 1.0, 0.0,

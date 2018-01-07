@@ -163,7 +163,7 @@ function createHelpMenu (text, translate, from, to) {
   line.light = false;
   line.color = [1, 153/255, 51/255, 1];
   vec3.set(line._rotation, -Math.PI * 0.5, 0, 0);
-  line.vao = new wg.VertexArrayObject(scene._gl, {
+  line.vao = new wg.VertexArray(scene._gl, {
     buffers: {
       position: [
         from[0], from[1], from[2],
@@ -213,7 +213,7 @@ function addData () {
   jumpRay.visible = false;
   jumpRay.light = false;
   jumpRay.color = [1, 153/255, 51/255, 1];
-  jumpRay.vao = new wg.VertexArrayObject(scene._gl, {
+  jumpRay.vao = new wg.VertexArray(scene._gl, {
     buffers: {
       position: [
         0, 0, 0,
@@ -249,7 +249,7 @@ function addData () {
   var line = new wg.Object();
   line.color = [1, 0, 0, 1];
   line.light = false;
-  line.vao = new wg.VertexArrayObject(scene._gl, {
+  line.vao = new wg.VertexArray(scene._gl, {
     buffers: {
       position: [
         -0.5,  0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5, // top

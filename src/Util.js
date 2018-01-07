@@ -28,7 +28,7 @@ Util.initWebGL = function (canvas, options, callback) {
     antialias: false,
     stencil: true
   });
-  addVertexArrayObjectSupport(gl);
+  addVertexArraySupport(gl);
   addInstancedArraysSupport(gl);
   // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
   gl.getExtension('OES_standard_derivatives');
@@ -86,7 +86,7 @@ var setCanvasSize = Util.setCanvasSize = function (canvas, width, height) {
   canvas.style.height = height + 'px';
 };
 
-function addVertexArrayObjectSupport (gl) {
+function addVertexArraySupport (gl) {
   // https://github.com/greggman/oes-vertex-array-object-polyfill
   if (!gl.createVertexArray) {
     var ext = gl.getExtension("OES_vertex_array_object");

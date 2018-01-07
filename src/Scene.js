@@ -236,7 +236,7 @@ var Scene = wg.Scene = function (canvas, options) {
     // antialias: false,
     stencil: true
   });
-  addVertexArrayObjectSupport(gl);
+  addVertexArraySupport(gl);
   // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
   gl.getExtension('OES_standard_derivatives');
   // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
@@ -271,7 +271,7 @@ var Scene = wg.Scene = function (canvas, options) {
     }
     gl.cache = { textures: new TextureCache(gl) };
     gl.cache.textures.trigger.on('load', self._handleImageLoaded, self);
-    gl.cache.quadVao = new VertexArrayObject(gl, {
+    gl.cache.quadVao = new VertexArray(gl, {
       buffers: {
         position: [
           1.0, 1.0, 0.0,
@@ -530,7 +530,7 @@ Scene.prototype.draw = function () {
   self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self.getVertexArrayObject(object),
+    var vao = self.getVertexArray(object),
       cubeMap = object.image && object.image.type === 'CUBE_MAP';
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
@@ -603,7 +603,7 @@ Scene.prototype.clear = function () {
   self._dirty = true;
 };
 
-Scene.prototype.getVertexArrayObject = function (object) {
+Scene.prototype.getVertexArray = function (object) {
   var self = this,
     gl = self._gl,
     type = object.type,
@@ -613,7 +613,7 @@ Scene.prototype.getVertexArrayObject = function (object) {
     return object.vao;
   }
   if (geometry && !vao) {
-    vao = gl.cache.vaos[type] = new VertexArrayObject(gl, {
+    vao = gl.cache.vaos[type] = new VertexArray(gl, {
       buffers: geometry
     });
   }

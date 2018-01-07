@@ -61,7 +61,7 @@ function initWebGL(gl) {
     fragment: FRAGMENT_SHADER_SOURCE
   });
 
-  vao = new wg.VertexArrayObject(gl, {
+  vao = new wg.VertexArray(gl, {
     buffers: {
       position: [
         1.0, 1.0, 0.0,

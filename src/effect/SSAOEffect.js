@@ -255,7 +255,7 @@ SSAOEffect.prototype._draw = function (program) {
     if (object.visible === false) {
       return;
     }
-    var vao = scene.getVertexArrayObject(object);
+    var vao = scene.getVertexArray(object);
     if (vao) {
       if (!object._viewNormalMatrix) {
         object._viewNormalMatrix = mat3.create();

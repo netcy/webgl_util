@@ -71,7 +71,7 @@ function initWebGL(gl) {
   offsetAll1.set(offset1, 0);
   offsetAll1.set(offset2, 16);
 
-  vao1 = new wg.VertexArrayObject(gl, {
+  vao1 = new wg.VertexArray(gl, {
     buffers: {
       position: [
         1.0, 1.0, 0.0,
@@ -94,7 +94,7 @@ function initWebGL(gl) {
     instancedAttrs: ['offset']
   });
 
-  vao2 = new wg.VertexArrayObject(gl, {
+  vao2 = new wg.VertexArray(gl, {
     buffers: {
       position: [
         1.0, 1.0, 0.0,

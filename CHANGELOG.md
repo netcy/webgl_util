@@ -47,13 +47,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.12.0] - 2017-10-13
 ### Added
-- VertexArrayObject#setPosition
+- VertexArray#setPosition
 - Object#light
 
 ### Changed
 - WebVR: side button to move, trigger to select, top button to jump
-- VertexArrayObject#draw(preDrawCallback)
-- VertexArrayObject(gl, options)
+- VertexArray#draw(preDrawCallback)
+- VertexArray(gl, options)
 - Scene#onGamepadChanged(leftGamepad, rightGamepad, pressedGamepad, buttonIndex)
 
 
@@ -122,7 +122,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - Scene
 - Camera
-- OESVertexArrayObject-polyfill
+- OESVertexArray-polyfill
 
 ### Fixed
 - Program.setUniforms bug

@@ -31,7 +31,7 @@ Util.initWebGL = function (canvas, options, callback) {
     antialias: false,
     stencil: true
   });
-  addVertexArrayObjectSupport(gl);
+  addVertexArraySupport(gl);
   addInstancedArraysSupport(gl);
   // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
   gl.getExtension('OES_standard_derivatives');
@@ -89,7 +89,7 @@ var setCanvasSize = Util.setCanvasSize = function (canvas, width, height) {
   canvas.style.height = height + 'px';
 };
 
-function addVertexArrayObjectSupport (gl) {
+function addVertexArraySupport (gl) {
   // https://github.com/greggman/oes-vertex-array-object-polyfill
   if (!gl.createVertexArray) {
     var ext = gl.getExtension("OES_vertex_array_object");
@@ -1146,9 +1146,9 @@ TextureCache.prototype.get = function (image) {
   return imageTexture;
 };
 
-// Source: src/VertexArrayObject.js
+// Source: src/VertexArray.js
 /**
- * VertexArrayObject
+ * VertexArray
  * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
  * @param {[Object]} options
  * @example
@@ -1157,7 +1157,7 @@ TextureCache.prototype.get = function (image) {
  *     mode: 'TRIANGLES',
  *     instancedAttrs: null // ['offset']
  */
-var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
+var VertexArray = wg.VertexArray = function (gl, options) {
   var self = this,
     buffers = options.buffers;
 
@@ -1221,11 +1221,11 @@ var VertexArrayObject = wg.VertexArrayObject = function (gl, options) {
   self._parts = options.buffers.parts;
 };
 
-VertexArrayObject.prototype.setPosition = function (datas) {
+VertexArray.prototype.setPosition = function (datas) {
   this.setBufferDatas('position', datas);
 };
 
-VertexArrayObject.prototype.setBufferDatas = function (name, datas, instanced) {
+VertexArray.prototype.setBufferDatas = function (name, datas, instanced) {
   var self = this,
     gl = self._gl,
     bufferObject, attribute;
@@ -1246,7 +1246,7 @@ VertexArrayObject.prototype.setBufferDatas = function (name, datas, instanced) {
   }
 };
 
-VertexArrayObject.prototype._setBufferOptions = function (attribute, datas, instanced) {
+VertexArray.prototype._setBufferOptions = function (attribute, datas, instanced) {
   //https://stackoverflow.com/questions/38853096/webgl-how-to-bind-values-to-a-mat4-attribute
   var self = this,
     gl = self._gl,
@@ -1273,7 +1273,7 @@ VertexArrayObject.prototype._setBufferOptions = function (attribute, datas, inst
   }
 };
 
-VertexArrayObject.prototype.draw = function (preDrawCallback) {
+VertexArray.prototype.draw = function (preDrawCallback) {
   var self = this,
     gl = self._gl;
   gl.bindVertexArray(self._vao);
@@ -1310,7 +1310,7 @@ VertexArrayObject.prototype.draw = function (preDrawCallback) {
   }
 };
 
-VertexArrayObject.prototype.dispose = function () {
+VertexArray.prototype.dispose = function () {
   var self = this;
   Object.keys(self._bufferMap).forEach(function (key) {
     self._gl.deleteBuffer(self._bufferMap[key]);
@@ -1320,7 +1320,7 @@ VertexArrayObject.prototype.dispose = function () {
   self._bufferMap = {};
 };
 
-// Source: src/Effect.js
+// Source: src/effect/Effect.js
 var Effect = wg.Effect = function (gl) {
   var self = this;
   self._gl = gl;
@@ -1334,7 +1334,7 @@ Effect.prototype.getOutputTexture = function () {
   return null;
 };
 
-// Source: src/FxaaEffect.js
+// Source: src/effect/FxaaEffect.js
 var VERTEX_SHADER_FXAA = `
 #ifdef GL_ES
   precision highp float;
@@ -1491,7 +1491,7 @@ FxaaEffect.prototype.isEnabled = function () {
   return this._enabled;
 };
 
-// Source: src/TiltShiftEffect.js
+// Source: src/effect/TiltShiftEffect.js
 var VERTEX_SHADER_TILT_SHIFT = `
 #ifdef GL_ES
   precision highp float;
@@ -1738,7 +1738,7 @@ TiltShiftEffect.prototype.getCenter = function () {
   return this._center;
 };
 
-// Source: src/ZoomBlurEffect.js
+// Source: src/effect/ZoomBlurEffect.js
 var VERTEX_SHADER_ZOOM_BLUR = `
 #ifdef GL_ES
   precision highp float;
@@ -1860,7 +1860,7 @@ ZoomBlurEffect.prototype.getStrength = function () {
   return this._strength;
 };
 
-// Source: src/OutlineEffect.js
+// Source: src/effect/OutlineEffect.js
 var VERTEX_SHADER_OUTLINE = `
 # ifdef GL_ES
   precision highp float;
@@ -1969,7 +1969,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         return;
       }
       if (object.outline) {
-        var vao = scene.getVertexArrayObject(object);
+        var vao = scene.getVertexArray(object);
         if (vao) {
           program.setUniforms({
             u_modelMatrix: object.getModelMatrix()
@@ -2017,7 +2017,7 @@ OutlineEffect.prototype.getOutlineGap = function () {
   return this._outlineGap;
 };
 
-// Source: src/GlowEffect.js
+// Source: src/effect/GlowEffect.js
 var VERTEX_SHADER_GLOW_COLOR = `
 # ifdef GL_ES
   precision highp float;
@@ -2291,7 +2291,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         return;
       }
       if (!object.glow && !object.transparent) {
-        var vao = scene.getVertexArrayObject(object);
+        var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
             u_modelMatrix: object.getModelMatrix()
@@ -2320,7 +2320,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         return;
       }
       if (object.glow) {
-        var vao = scene.getVertexArrayObject(object);
+        var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
             u_modelMatrix: object.getModelMatrix()
@@ -2389,7 +2389,7 @@ GlowEffect.prototype.getBlurSize = function () {
   return this._blurSize;
 };
 
-// Source: src/SSAOEffect.js
+// Source: src/effect/SSAOEffect.js
 var VERTEX_SHADER_SSAO_DEFER = `
 #ifdef GL_ES
   precision highp float;
@@ -2647,7 +2647,7 @@ SSAOEffect.prototype._draw = function (program) {
     if (object.visible === false) {
       return;
     }
-    var vao = scene.getVertexArrayObject(object);
+    var vao = scene.getVertexArray(object);
     if (vao) {
       if (!object._viewNormalMatrix) {
         object._viewNormalMatrix = mat3.create();
@@ -3273,7 +3273,7 @@ var Scene = wg.Scene = function (canvas, options) {
     // antialias: false,
     stencil: true
   });
-  addVertexArrayObjectSupport(gl);
+  addVertexArraySupport(gl);
   // https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives
   gl.getExtension('OES_standard_derivatives');
   // http://blog.tojicode.com/2012/03/anisotropic-filtering-in-webgl.html
@@ -3308,7 +3308,7 @@ var Scene = wg.Scene = function (canvas, options) {
     }
     gl.cache = { textures: new TextureCache(gl) };
     gl.cache.textures.trigger.on('load', self._handleImageLoaded, self);
-    gl.cache.quadVao = new VertexArrayObject(gl, {
+    gl.cache.quadVao = new VertexArray(gl, {
       buffers: {
         position: [
           1.0, 1.0, 0.0,
@@ -3567,7 +3567,7 @@ Scene.prototype.draw = function () {
   self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self.getVertexArrayObject(object),
+    var vao = self.getVertexArray(object),
       cubeMap = object.image && object.image.type === 'CUBE_MAP';
     if (vao) {
       object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
@@ -3640,7 +3640,7 @@ Scene.prototype.clear = function () {
   self._dirty = true;
 };
 
-Scene.prototype.getVertexArrayObject = function (object) {
+Scene.prototype.getVertexArray = function (object) {
   var self = this,
     gl = self._gl,
     type = object.type,
@@ -3650,7 +3650,7 @@ Scene.prototype.getVertexArrayObject = function (object) {
     return object.vao;
   }
   if (geometry && !vao) {
-    vao = gl.cache.vaos[type] = new VertexArrayObject(gl, {
+    vao = gl.cache.vaos[type] = new VertexArray(gl, {
       buffers: geometry
     });
   }
