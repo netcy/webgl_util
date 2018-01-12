@@ -45,10 +45,12 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
     d: 1,
     illum: 0
   };
+  // https://en.wikipedia.org/wiki/Wavefront_.obj_file
   // http://paulbourke.net/dataformats/mtl/
   // http://paulbourke.net/dataformats/obj/
   // https://people.cs.clemson.edu/~dhouse/courses/405/docs/brief-mtl-file-format.html
   // http://www.fileformat.info/format/material/
+  // http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
   mtl && mtl.trim().split('\n').forEach(function (line) {
     line = line.trim();
     if (!line || line.startsWith('#')) {
