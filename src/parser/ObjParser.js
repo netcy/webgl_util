@@ -3,8 +3,8 @@ var SPACE = /\s+/;
 
 ObjParser.parseObjMtlUrl = function (urlPath, name, callback) {
   urlPath = urlPath + (urlPath.endsWith('/') ? '' : '/');
-  ajax(urlPath + name + '.obj', function (obj) {
-    ajax(urlPath + name + '.mtl', function (mtl) {
+  ajax(urlPath + name + '.obj', undefined, function (obj) {
+    ajax(urlPath + name + '.mtl', undefined, function (mtl) {
       callback(ObjParser.parseObjMtl(urlPath, obj, mtl));
     });
   });

@@ -128,8 +128,11 @@ var equalObject = Util.equalObject = function (a, b) {
   });
 };
 
-var ajax = Util.ajax = function (url, callback) {
+var ajax = Util.ajax = function (url, responseType, callback) {
   var xhr = new XMLHttpRequest();
+  if (responseType) {
+    xhr.responseType = responseType;
+  }
   xhr.onreadystatechange = function (e) {
      if (this.readyState === 4) {
       if (this.status === 200) {

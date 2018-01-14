@@ -32,6 +32,7 @@ module.exports = function (grunt) {
       'src/object/Torus.js',
       'src/object/Sphere.js',
       'src/parser/ObjParser.js',
+      'src/parser/GLTFParser.js',
       'src/material/Material.js',
     ],
     dest: 'dist/wg.js',

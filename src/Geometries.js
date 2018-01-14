@@ -1,6 +1,12 @@
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
-  wg.geometries[name] = calculateBarycentric(calculateTangent(geometry));
+  if (!geometry.tangent && geometry.uv) {
+    calculateTangent(geometry);
+  }
+  if (geometry.tangent) {
+    calculateBarycentric(geometry);
+  }
+  wg.geometries[name] = geometry;
 };
 
 var createCube = Util.createCube = function (side) {
