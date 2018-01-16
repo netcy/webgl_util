@@ -17,7 +17,7 @@ function addData () {
     var cube = new wg.Object();
     // cube.type = 'vive';
     cube.type = 'cube';
-    cube.image = 'images/2048.jpeg';
+    cube.material.diffuseImage = 'images/2048.jpeg';
     scene.add(cube);
   }
 }

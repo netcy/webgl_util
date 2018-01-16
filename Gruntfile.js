@@ -1,3 +1,5 @@
+var fs = require('fs');
+
 module.exports = function (grunt) {
   grunt.loadNpmTasks('grunt-contrib-clean');
   grunt.loadNpmTasks('grunt-contrib-concat');
@@ -18,6 +20,8 @@ module.exports = function (grunt) {
       'src/Texture.js',
       'src/TextureCache.js',
       'src/VertexArray.js',
+      'src/shader/Shader.js',
+      'src/shader/ShaderUtil.js',
       'src/Camera.js',
       'src/Scene.js',
       'src/effect/Effect.js',
@@ -46,6 +50,14 @@ module.exports = function (grunt) {
     }
   });
 
+  grunt.registerTask('shader', 'Merge shader', function () {
+    var defaultVertexShader = fs.readFileSync('src/shader/default.vs', { encoding: 'utf8' });
+    var defaultFragmentShader = fs.readFileSync('src/shader/default.fs', { encoding: 'utf8' });
+    var shader = "var defaultVertexShader = '" + defaultVertexShader.split('\n').join('\\n') + "';\n";
+    shader += "var defaultFragmentShader = '" + defaultFragmentShader.split('\n').join('\\n') + "';\n";
+    fs.writeFileSync('src/shader/Shader.js', shader);
+  });
+
   grunt.config('uglify.all', {
     src: 'dist/wg.js',
     dest: 'dist/wg-min.js'
@@ -53,11 +65,13 @@ module.exports = function (grunt) {
 
   grunt.registerTask('default', [
     'clean',
+    'shader',
     'concat'
   ]);
 
   grunt.registerTask('release', [
     'clean',
+    'shader',
     'concat',
     'uglify'
   ]);

@@ -153,15 +153,15 @@ function createHelpMenu (text, translate, from, to) {
   vec3.set(helpMenu._scale, 0.08, 0.04, 1);
   vec3.copy(helpMenu._position, translate);
   vec3.set(helpMenu._rotation, -Math.PI * 0.5, 0, 0);
-  helpMenu.image = helpCanvas;
-  helpMenu.transparent = true;
+  helpMenu.material.diffuseImage = helpCanvas;
+  helpMenu.material.transparent = true;
   scene.add(helpMenu);
 
   var line = new wg.Object();
   helpMenus.push(line);
   line.visible = false;
   line.light = false;
-  line.color = [1, 153/255, 51/255, 1];
+  line.material.diffuseColor = [1, 153/255, 51/255, 1];
   vec3.set(line._rotation, -Math.PI * 0.5, 0, 0);
   line.vao = new wg.VertexArray(scene._gl, {
     buffers: {
@@ -179,14 +179,14 @@ function addData () {
   var cube = window.cube = new wg.Object();
   cube.type = 'cube';
   cube.outline = true;
-  cube.image = 'images/crate.gif';
+  cube.material.diffuseImage = 'images/crate.gif';
   cube.setPosition(-2, 0, 0);
   scene.add(cube);
 
   var sphere = new wg.Object();
   sphere.type = 'sphere';
   sphere.glow = true;
-  sphere.color = [0.6, 0.6, 0.6, 1];
+  sphere.material.diffuseColor = [0.6, 0.6, 0.6, 1];
   sphere.setPosition(0, 0, -2);
   scene.add(sphere);
 
@@ -206,13 +206,13 @@ function addData () {
   selectRay.visible = false;
   // selectRay.glow = true;
   selectRay.type = 'cone';
-  selectRay.color = [1, 153/255, 51/255, 1];
+  selectRay.material.diffuseColor = [1, 153/255, 51/255, 1];
   scene.add(selectRay);
 
   jumpRay = new wg.Object();
   jumpRay.visible = false;
   jumpRay.light = false;
-  jumpRay.color = [1, 153/255, 51/255, 1];
+  jumpRay.material.diffuseColor = [1, 153/255, 51/255, 1];
   jumpRay.vao = new wg.VertexArray(scene._gl, {
     buffers: {
       position: [
@@ -235,19 +235,19 @@ function addData () {
   grid.visible = false;
   grid.setRotation(-Math.PI / 2, 0, 0);
   grid.setScale(10, 10, 1);
-  vec2.set(grid.textureScale, 10, 10);
+  vec2.set(grid.material.textureScale, 10, 10);
   grid.light = false;
   grid.type = 'plane';
-  grid.image = {
+  grid.material.diffuseImage = {
     url: 'images/grid.png',
     wrapS: 'REPEAT',
     wrapT: 'REPEAT'
   };
-  grid.transparent = true;
+  grid.material.transparent = true;
   scene.add(grid);
 
   var line = new wg.Object();
-  line.color = [1, 0, 0, 1];
+  line.material.diffuseColor = [1, 0, 0, 1];
   line.light = false;
   line.vao = new wg.VertexArray(scene._gl, {
     buffers: {

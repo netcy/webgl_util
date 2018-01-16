@@ -15,26 +15,27 @@ function init () {
   });
 
   var controller = new wg.Object();
-  controller.wireframe = true;
-  controller.transparent = true;
+  controller.material.wireframe = true;
+  controller.material.transparent = true;
   controller.type = 'vive';
   scene.add(controller);
 
   var cube = new wg.Cube().setPosition(0, 0, -3);
-  cube.image = 'images/crate.gif';
-  cube.wireframe = true;
-  cube.transparent = true;
+  cube.material.diffuseImage = 'images/crate.gif';
+  cube.material.wireframe = true;
+  cube.material.transparent = true;
   scene.add(cube);
 
   var sphere = new wg.Sphere().setPosition(-3, 0, 0);
-  sphere.wireframe = true;
-  sphere.transparent = true;
-  sphere.color = [1, 0, 1, 1];
+  sphere.material.wireframe = true;
+  sphere.material.wireframeOnly = false;
+  sphere.material.transparent = true;
+  sphere.material.diffuseColor = [1, 0, 1, 1];
   scene.add(sphere);
 
   var torus = new wg.Torus().setPosition(3, 0, 0);
-  torus.wireframe = true;
-  torus.transparent = true;
-  torus.color = [1, 0, 1, 1];
+  torus.material.wireframe = true;
+  torus.material.transparent = true;
+  torus.material.diffuseColor = [1, 0, 1, 1];
   scene.add(torus);
 }

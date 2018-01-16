@@ -1,6 +1,6 @@
 var wg = root.wg = {};
 var Util = wg.Util = {
-  version: '0.17.0'
+  version: '0.20.0'
 };
 
 var getClientPoint = Util.getClientPoint = function (e) {
@@ -145,4 +145,23 @@ var ajax = Util.ajax = function (url, responseType, callback) {
   };
   xhr.open('get', url);
   xhr.send();
+};
+
+var defineProperty = Util.defineProperty = function (object, property, defaultValue, callback) {
+  var propertyName = '_' + property;
+  object[propertyName] = defaultValue;
+  Object.defineProperty(object, property, {
+    configurable: true,
+    enumerable: true,
+    get: function () {
+      return this[propertyName];
+    },
+    set: function (value) {
+      var oldValue = this[propertyName];
+      this[propertyName] = value;
+      if (callback) {
+        callback.call(this, property, oldValue, value);
+      }
+    }
+  });
 };

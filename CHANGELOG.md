@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.20.0] - 2018-01-17
+### Added
+- Add Material
+
+### Changed
+- Refactor Shading
+
+
+## [0.19.0] - 2018-01-14
+### Added
+- Add GLTFParser
+
+
 ## [0.18.0] - 2018-01-07
 ### Added
 - Add instanced support

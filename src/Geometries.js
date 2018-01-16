@@ -1,10 +1,10 @@
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
   if (!geometry.tangent && geometry.uv) {
-    calculateTangent(geometry);
+    geometry = calculateTangent(geometry);
   }
   if (geometry.tangent) {
-    calculateBarycentric(geometry);
+    geometry = calculateBarycentric(geometry);
   }
   wg.geometries[name] = geometry;
 };

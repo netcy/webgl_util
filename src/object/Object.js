@@ -12,10 +12,20 @@ wg.Object = function () {
   self._position = vec3.create();
   self._scale = vec3.fromValues(1, 1, 1);
   self._rotation = vec3.fromValues(0, 0, 0);
-  self.textureScale = vec2.fromValues(1, 1);
-  self.color = [1, 1, 1, 1];
   self._matrixDirty = false;
+  self.material = new Material();
 };
+
+[
+  {
+    name: 'clipPlane',
+    value: null
+  },
+].forEach(function (property) {
+  defineProperty(wg.Object.prototype, property.name, property.value, function (property, oldValue, newValue) {
+    this.material.clip = !!newValue;
+  });
+});
 
 wg.Object.prototype.setPosition = function (x, y, z) {
   var self = this;

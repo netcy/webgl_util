@@ -52,28 +52,28 @@ function init () {
   };
 
   var cube = new wg.Cube().setPosition(0, 0, -5);
-  cube.image = 'images/crate.gif';
+  cube.material.diffuseImage = 'images/crate.gif';
   scene.add(cube);
 
   var sphere = new wg.Sphere().setPosition(-5, 0, 0);
-  sphere.color = [1, 0, 1, 1];
-  sphere.imageEnv = image;
+  sphere.material.diffuseColor = [1, 0, 1, 1];
+  sphere.material.envImage = image;
   scene.add(sphere);
 
   var torus = new wg.Torus().setPosition(5, 0, 0);
-  torus.color = [1, 0, 1, 1];
-  torus.imageEnv = image;
+  torus.material.diffuseColor = [1, 0, 1, 1];
+  torus.material.envImage = image;
   scene.add(torus);
 
   var skybox = new wg.Cube();
-  skybox.image = image;
+  skybox.material.diffuseImage = image;
   skybox.setScale(50, 50, 50);
   skybox.light = false;
   scene.add(skybox);
 
   var center = new wg.Cube();
-  center.image = 'images/crate.gif';
-  center.imageEnv = image;
+  center.material.diffuseImage = 'images/crate.gif';
+  center.material.envImage = image;
   center.light = false;
   scene.add(center);
 }

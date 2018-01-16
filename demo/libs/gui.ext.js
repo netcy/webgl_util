@@ -5,7 +5,7 @@ function createGUI (scene) {
     clearAlpha: scene.getClearColor()[3] * 255,
     ambientColor: convertGLColorToRGB(scene.getAmbientColor()),
     lightColor: convertGLColorToRGB(scene.getLightColor()),
-    wireframeColor: convertGLColorToRGB(scene.getWireframeColor()),
+    // wireframeColor: convertGLColorToRGB(scene.getWireframeColor()),
 
     glowColor: convertGLColorToRGB(scene._glowEffect.getGlowColor()),
     outlineColor: convertGLColorToRGB(scene._outlineEffect.getOutlineColor()),
@@ -25,16 +25,16 @@ function createGUI (scene) {
   addGUIPosition(sceneFolder, config, scene, 'lightPosition', 'Light Position');
   addGUIValue(sceneFolder, scene, 'enableSSAO', 'Enable SSAO');
 
-  var wireframeFolder = sceneFolder.addFolder('Wireframe');
+  /*var wireframeFolder = sceneFolder.addFolder('Wireframe');
   addGUIColor(wireframeFolder, config, scene, 'wireframeColor', 'Color');
   addGUIValue(wireframeFolder, scene, 'wireframeWidth', 'Width', {
     min: 0,
     max: 5.0,
     step: 0.5
   });
-  addGUIValue(wireframeFolder, scene, 'wireframeOnly', 'Only');
+  addGUIValue(wireframeFolder, scene, 'wireframeOnly', 'Only');*/
 
-  addGUIPosition4(sceneFolder, config, scene, 'clipPane', 'Clip Pane');
+  // addGUIPosition4(sceneFolder, config, scene, 'clipPane', 'Clip Pane');
 
   var cameraFolder = gui.addFolder('Camera');
   var camera = scene.getCamera();

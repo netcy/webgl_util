@@ -188,20 +188,26 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
           });
         } else {
           result.parts.push(part = partMap[materialName] = {
-            color: material.Kd,
             counts: [counts = {
               offset: offset,
               count: 0
             }],
             name: materialName,
-            alpha: material.d,
+            ambientColor: material.Ka,
+            diffuseColor: material.Kd,
+            specularColor: material.Ks,
+            transparency: material.d,
+            shininess: material.Ns,
             blending: material.d < 1
           });
+          if (material.map_Ka) {
+            part.ambientImage = urlPath + material.map_Ka;
+          }
           if (material.map_Kd) {
-            part.image = urlPath + material.map_Kd;
-            if (material.map_Ks) {
-              part['specularImage'] = urlPath + material.map_Ks;
-            }
+            part.diffuseImage = urlPath + material.map_Kd;
+          }
+          if (material.map_Ks) {
+            part.specularImage = urlPath + material.map_Ks;
           }
           if (part.blending) {
             result.blending = true;

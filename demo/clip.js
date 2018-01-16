@@ -16,22 +16,22 @@ function init () {
   scene.setClearColor([1, 1, 1, 0]);
   scene.setLightPosition([4.0, 4.0, 4.0]);
   // scene.setAmbientColor([0.4, 0.4, 0.4]);
-  scene._clipPane = [0, 1, 0, 0];
 
   var gui = createGUI(scene);
 
   var box = new wg.Cube();
   // box.setScale(1.0, 1.0, 1.0);
   // box.setPosition(0.0, 1.7, 0.0);
-  // vec2.set(box.textureScale, 100, 100);
+  // vec2.set(box.material.textureScale, 100, 100);
   // box.setScale(100, 100, 100);
-  box.image = {
+  box.material.diffuseImage = {
     url: 'images/crate.gif',
     anisotropy: 16,
     wrapS: 'REPEAT',
     wrapT: 'REPEAT'
   };
-  // box.color = [0.6, 0.6, 0.6, 1];
+  box.material.clipPlane = [0, 1, 0, 0];
+  // box.material.diffuseColor = [0.6, 0.6, 0.6, 1];
   // box.outline = true;
   scene.add(box);
 }

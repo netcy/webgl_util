@@ -150,6 +150,25 @@ var ajax = Util.ajax = function (url, responseType, callback) {
   xhr.send();
 };
 
+var defineProperty = Util.defineProperty = function (object, property, defaultValue, callback) {
+  var propertyName = '_' + property;
+  object[propertyName] = defaultValue;
+  Object.defineProperty(object, property, {
+    configurable: true,
+    enumerable: true,
+    get: function () {
+      return this[propertyName];
+    },
+    set: function (value) {
+      var oldValue = this[propertyName];
+      this[propertyName] = value;
+      if (callback) {
+        callback.call(this, property, oldValue, value);
+      }
+    }
+  });
+};
+
 // Source: src/Trigger.js
 var Trigger = wg.Trigger = function () {
   this._listeners = {};
@@ -258,10 +277,10 @@ Object.assign(Trigger.prototype, {
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
   if (!geometry.tangent && geometry.uv) {
-    calculateTangent(geometry);
+    geometry = calculateTangent(geometry);
   }
   if (geometry.tangent) {
-    calculateBarycentric(geometry);
+    geometry = calculateBarycentric(geometry);
   }
   wg.geometries[name] = geometry;
 };
@@ -1329,6 +1348,32 @@ VertexArray.prototype.dispose = function () {
   self._bufferMap = {};
 };
 
+// Source: src/shader/Shader.js
+var defaultVertexShader = 'attribute vec3 a_position;\nuniform mat4 u_modelViewProjectMatrix;\n\n#ifdef VERTEX_COLOR\n  attribute vec4 a_color;\n  varying vec4 v_color;\n#endif\n\n#if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n  attribute vec3 a_normal;\n#endif\n\n#if defined(LIGHT) && defined(NORMAL_MAP)\n  attribute vec3 a_tangent;\n#endif\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  attribute vec2 a_uv;\n  uniform vec2 u_textureScale;\n  varying vec2 v_uv;\n#endif\n\n#if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n  uniform mat3 u_normalMatrix;\n  varying vec3 v_normal;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat4 u_viewMatrix;\n  varying vec4 v_viewPosition;\n#endif\n\n#if defined(LIGHT) || defined(ENV_MAP)\n  uniform mat3 u_normalViewMatrix;\n#endif\n\n#ifdef LIGHT\n  uniform mat4 u_modelViewMatrix;\n  uniform vec3 u_lightPosition;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n#endif\n\n#ifdef WIREFRAME\n  attribute vec3 a_barycentric;\n  varying vec3 v_barycentric;\n#endif\n\n#ifdef CLIPPLANE\n  uniform mat4 u_modelMatrix;\n  varying vec4 v_woldPosition;\n#endif\n\nvoid main () {\n  vec4 position = vec4(a_position, 1.0);\n  gl_Position = u_modelViewProjectMatrix * position;\n\n  #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)\n    #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n      v_normal = u_normalMatrix * a_normal;\n    #endif\n\n    #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n      v_uv = a_uv * u_textureScale;\n    #endif\n\n    #ifdef LIGHT\n      vec3 viewPosition = (u_modelViewMatrix * position).xyz;\n      v_lightDirection = u_lightPosition - viewPosition;\n      v_eyeDirection = -viewPosition;\n\n      #ifdef NORMAL_MAP\n        mat3 modelViewMatrix3 = mat3(u_modelViewMatrix);\n        vec3 normal = normalize(modelViewMatrix3 * a_normal);\n        vec3 tangent = normalize(modelViewMatrix3 * a_tangent);\n        vec3 bitangent = cross(normal, tangent);\n        mat3 tbnMatrix = mat3(\n          tangent.x, bitangent.x, normal.x,\n          tangent.y, bitangent.y, normal.y,\n          tangent.z, bitangent.z, normal.z\n        );\n        v_lightDirection = tbnMatrix * v_lightDirection;\n        v_eyeDirection = tbnMatrix * v_eyeDirection;\n      #else\n        v_normalView = u_normalViewMatrix * a_normal;\n      #endif\n    #else\n      #if defined(ENV_MAP)\n        v_normalView = u_normalViewMatrix * a_normal;\n      #endif\n    #endif\n\n    #ifdef ENV_MAP\n      v_viewPosition = u_viewMatrix * position;\n    #endif\n\n    #ifdef VERTEX_COLOR\n      v_color = a_color;\n    #endif\n  #endif\n\n  #ifdef WIREFRAME\n    v_barycentric = a_barycentric;\n  #endif\n\n  #ifdef CLIPPLANE\n    v_woldPosition = u_modelMatrix * position;\n  #endif\n}\n';
+var defaultFragmentShader = '#ifdef VERTEX_COLOR\n  varying vec4 v_color;\n#endif\n\n#ifdef DIFFUSE_MAP\n  #ifdef DIFFUSE_CUBE_MAP\n    uniform samplerCube u_diffuseSampler;\n    varying vec3 v_normal;\n  #else\n    uniform sampler2D u_diffuseSampler;\n  #endif\n#else\n  uniform vec4 u_diffuseColor;\n#endif\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  varying vec2 v_uv;\n#endif\n\n#ifdef NORMAL_MAP\n  uniform sampler2D u_normalSampler;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat3 u_modelViewInvMatrix;\n  uniform samplerCube u_envSampler;\n  varying vec4 v_viewPosition;\n#endif\n\n#ifdef LIGHT\n  uniform vec3 u_lightColor;\n  uniform vec3 u_lightAmbientColor;\n  uniform vec4 u_ambientColor;\n  uniform vec4 u_specularColor;\n  uniform vec4 u_emissionColor;\n  uniform float u_shininess;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n#endif\n\n#ifdef WIREFRAME\n  uniform vec3 u_wireframeColor;\n  uniform float u_wireframeWidth;\n  varying vec3 v_barycentric;\n\n  float edgeFactor () {\n    vec3 d = fwidth(v_barycentric);\n    vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, v_barycentric);\n    return min(min(a3.x, a3.y), a3.z);\n  }\n#endif\n\n#ifdef CLIPPLANE\n  uniform vec4 u_clipPlane;\n  varying vec4 v_woldPosition;\n#endif\n\nuniform float u_transparency;\n\nvoid main () {\n  #ifdef CLIPPLANE\n    float clipDistance = dot(v_woldPosition.xyz, u_clipPlane.xyz);\n    if (clipDistance > u_clipPlane.w) {\n      discard;\n    }\n  #endif\n\n  #if defined(WIREFRAME) && defined(WIREFRAME_ONLY)\n    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));\n  #else\n    #ifdef VERTEX_COLOR\n      vec4 color = v_color;\n    #else\n      #ifdef DIFFUSE_MAP\n        #ifdef DIFFUSE_CUBE_MAP\n          vec4 color = textureCube(u_diffuseSampler, v_normal);\n        #else\n          vec4 color = texture2D(u_diffuseSampler, v_uv);\n        #endif\n      #else\n        vec4 color = u_diffuseColor;\n      #endif\n    #endif\n\n    #ifdef ENV_MAP\n      vec3 N = v_normalView;\n      vec3 V = v_viewPosition.xyz;\n      vec3 R = reflect(V, N);\n      R = u_modelViewInvMatrix * R;\n      color = textureCube(u_envSampler, R) * color;\n    #endif\n\n    color.a *= u_transparency;\n\n    #ifdef LIGHT\n      #ifdef NORMAL_MAP\n        vec3 normal = normalize((texture2D(u_normalSampler, v_uv) * 2.0 - 1.0).rgb);\n      #else\n        vec3 normal = normalize(v_normalView);\n      #endif\n\n      vec3 lightDirection = normalize(v_lightDirection);\n      vec3 eyeDirection = normalize(v_eyeDirection);\n      float diffuse = max(dot(lightDirection, normal), 0.0);\n\n      vec3 reflectDirection = reflect(-lightDirection, normal);\n      float specular = 0.0;\n      if (u_shininess > 0.0) {\n        specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), u_shininess);\n      }\n\n      vec3 ambientColor = u_lightAmbientColor * u_ambientColor.rgb * color.rgb;\n      vec3 diffuseColor = u_lightColor * color.rgb * diffuse;\n      vec3 specularColor = u_lightColor * u_specularColor.rgb * specular;\n      color = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);\n    #endif\n    #ifdef WIREFRAME\n      gl_FragColor = mix(vec4(u_wireframeColor, 1.0), color, edgeFactor());\n    #else\n      gl_FragColor = color;\n    #endif\n  #endif\n}\n';
+
+// Source: src/shader/ShaderUtil.js
+
+var vertexShaderPrefix = 'precision highp float;\n';
+var fragmentShaderPrefix = '#extension GL_OES_standard_derivatives : enable\nprecision highp float;\n';
+
+function createProgram (gl, keys) {
+  var vertexShader = vertexShaderPrefix,
+    fragmentShader = fragmentShaderPrefix,
+    defines = '';
+  keys.forEach(function (key) {
+    defines += '#define ' + key + '\n';
+  });
+  vertexShader += defines;
+  vertexShader += defaultVertexShader;
+  fragmentShader += defines;
+  fragmentShader += defaultFragmentShader;
+  return new Program(gl, {
+    vertex: vertexShader,
+    fragment: fragmentShader
+  });
+}
+
 // Source: src/Camera.js
 var Camera = wg.Camera = function (scene) {
   var self = this,
@@ -1592,180 +1637,6 @@ Camera.prototype.invalidateProjectMatrix = function () {
 };
 
 // Source: src/Scene.js
-var VERTEX_SHADER_SCENE = `
-#ifdef GL_ES
-  precision highp float;
-#endif
-
-attribute vec3 a_position;
-attribute vec3 a_normal;
-attribute vec2 a_uv;
-attribute vec4 a_color;
-attribute vec3 a_tangent;
-attribute vec3 a_barycentric;
-
-uniform mat4 u_modelViewProjectMatrix;
-uniform mat4 u_modelViewMatrix;
-uniform mat4 u_modelMatrix;
-uniform mat4 u_viewMatrix;
-uniform mat3 u_normalMatrix;
-uniform mat3 u_normalViewMatrix;
-uniform vec2 u_textureScale;
-uniform bool u_normalMap;
-
-uniform vec3 u_lightPosition;
-
-varying vec3 v_normal;
-varying vec3 v_normalView;
-varying vec2 v_uv;
-varying vec4 v_color;
-varying vec3 v_barycentric;
-varying vec4 v_modelPosition;
-varying vec4 v_viewPosition;
-varying vec3 v_lightDirection;
-varying vec3 v_eyeDirection;
-varying vec4 v_woldPosition;
-
-void main () {
-  vec4 position = vec4(a_position, 1.0);
-  gl_Position = u_modelViewProjectMatrix * position;
-  v_normalView = u_normalViewMatrix * a_normal;
-  v_normal = u_normalMatrix * a_normal;
-  v_uv = a_uv * u_textureScale;
-  v_color = a_color;
-  v_barycentric = a_barycentric;
-  v_modelPosition = position;
-  v_viewPosition = u_viewMatrix * position;
-  v_woldPosition = u_modelMatrix * position;
-
-  vec3 viewPosition = (u_modelViewMatrix * position).xyz;
-  v_lightDirection = u_lightPosition - viewPosition;
-  v_eyeDirection = -viewPosition;
-
-  if (u_normalMap) {
-    vec3 tangent = u_normalViewMatrix * a_tangent;
-    vec3 bitangent = cross(v_normalView, tangent);
-    mat3 tbnMatrix = mat3(
-      tangent.x, bitangent.x, v_normalView.x,
-      tangent.y, bitangent.y, v_normalView.y,
-      tangent.z, bitangent.z, v_normalView.z
-    );
-    v_lightDirection = tbnMatrix * v_lightDirection;
-    v_eyeDirection = tbnMatrix * v_eyeDirection;
-  }
-}
-`;
-
-var FRAGMENT_SHADER_SCENE = `
-#extension GL_OES_standard_derivatives : enable
-#ifdef GL_ES
-  precision highp float;
-#endif
-
-
-#define CLIPPLANE
-
-uniform vec3 u_lightColor;
-uniform vec3 u_ambientColor;
-uniform bool u_texture;
-uniform bool u_normalMap;
-uniform bool u_wireframe;
-uniform bool u_wireframeOnly;
-uniform vec3 u_wireframeColor;
-uniform float u_wireframeWidth;
-uniform sampler2D u_samplerImage;
-uniform sampler2D u_samplerNormal;
-uniform samplerCube u_samplerCubeImage;
-uniform samplerCube u_samplerEnv;
-uniform bool u_light;
-uniform bool u_cubeMap;
-uniform bool u_envMap;
-uniform mat3 u_modelViewInvMatrix;
-
-varying vec3 v_normal;
-varying vec3 v_normalView;
-varying vec2 v_uv;
-varying vec4 v_color;
-varying vec3 v_barycentric;
-// iOS gl.getParameter(gl.MAX_VARYING_VECTORS) = 8
-// varying vec4 v_modelPosition;
-varying vec4 v_viewPosition;
-varying vec3 v_lightDirection;
-varying vec3 v_eyeDirection;
-varying vec4 v_woldPosition;
-
-#ifdef CLIPPLANE
-  uniform vec4 u_clipPlane;
-#endif
-
-float edgeFactor () {
-  vec3 d = fwidth(v_barycentric);
-  vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, v_barycentric);
-  return min(min(a3.x, a3.y), a3.z);
-}
-
-/*float edgeFactor (vec2 parameter) {
-  vec2 d = fwidth(parameter);
-  vec2 looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
-  vec2 a2 = smoothstep(vec2(0.0), d * u_wireframeWidth, looped);
-  return min(a2.x, a2.y);
-}
-
-float edgeFactor (vec3 parameter) {
-  vec3 d = fwidth(parameter);
-  vec3 looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
-  vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, looped);
-  return min(min(a3.x, a3.y), a3.z);
-}*/
-
-void main () {
-  #ifdef CLIPPLANE
-    float clipDistance = dot(v_woldPosition.xyz, u_clipPlane.xyz);
-    if (clipDistance > u_clipPlane.w) {
-      discard;
-    }
-  #endif
-  if (u_wireframe && u_wireframeOnly) {
-    // gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor(v_modelPosition.xyz * 500.0)));
-    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
-  } else {
-    vec4 color = v_color;
-    if (u_cubeMap) {
-      color = textureCube(u_samplerCubeImage, v_normal);
-    } else if (u_texture) {
-      color = texture2D(u_samplerImage, v_uv);
-    }
-    if (u_envMap) {
-      vec3 N = v_normalView;
-      vec3 V = v_viewPosition.xyz;
-      vec3 R = reflect(V, N);
-      R = u_modelViewInvMatrix * R;
-      color = textureCube(u_samplerEnv, R) * color;
-    }
-    if (u_light) {
-      vec3 normal = normalize(u_normalMap ? (texture2D(u_samplerNormal, v_uv) * 2.0 - 1.0).rgb : v_normalView);
-      vec3 lightDirection = normalize(v_lightDirection);
-      vec3 eyeDirection = normalize(v_eyeDirection);
-      float diffuse = max(dot(lightDirection, normal), 0.0);
-
-      vec3 reflectDirection = reflect(-lightDirection, normal);
-      float specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), 10.0);
-
-      vec3 ambientColor = u_ambientColor * color.rgb;
-      vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-      vec3 specularColor = vec3(0.3, 0.3, 0.3) * u_lightColor * specular;
-      gl_FragColor = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
-    } else {
-      gl_FragColor = color;
-    }
-    if (u_wireframe) {
-      // gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor(v_modelPosition.xyz * 500.0));
-      gl_FragColor = mix(vec4(u_wireframeColor, 1.0), gl_FragColor, edgeFactor());
-    }
-  }
-}
-`;
-
 var VERTEX_SHADER_OUTPUT = `
 #ifdef GL_ES
   precision highp float;
@@ -1807,14 +1678,21 @@ var Scene = wg.Scene = function (canvas, options) {
   self._canvas = canvas;
   self._dirty = true;
   self._objects = [];
+  self._programs = {};
+  self._uniforms = {
+    u_envSampler: 0,
+    u_normalSampler: 1,
+    u_ambientSampler: 2,
+    u_diffuseSampler: 3,
+    u_emissionSampler: 4,
+    u_specularSampler: 5
+  };
   self._camera = new Camera(self);
   self._lightColor = [1, 1, 1];
   self._lightPosition = [10, 10, 10];
+  self._lightViewPosition = vec3.create();
   self._ambientColor = [.3, .3, .3];
   self._clearColor = [0, 0, 0, 0];
-  self._wireframeColor = [69.0/255.0, 132.0/255.0, 206.0/255.0];
-  self._wireframeWidth = 1.0;
-  self._wireframeOnly = true;
   self._enableSSAO = false;
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
   self._autoResize = false;
@@ -1878,35 +1756,20 @@ var Scene = wg.Scene = function (canvas, options) {
       }
     });
     gl.cache.vaos = {};
-    // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    // gl.disable(gl.CULL_FACE);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    gl.cache.emptyTexture = new Texture(gl, {
-      width: 1,
-      height: 1,
-      data: new Uint8Array([255, 255, 255, 255])
-    });
-    gl.cache.emptyCubeTexture = new Texture(gl, {
-      width: 1,
-      height: 1,
-      data: new Uint8Array([255, 255, 255, 255]),
-      type: 'CUBE_MAP'
-    });
-    self._sceneProgram = new Program(gl, {
-      vertex: VERTEX_SHADER_SCENE,
-      fragment: FRAGMENT_SHADER_SCENE
-    });
-    self._outputProgram = new Program(gl, {
+    /*self._outputProgram = new Program(gl, {
       vertex: VERTEX_SHADER_OUTPUT,
       fragment: FRAGMENT_SHADER_OUTPUT
     });
     self._outputProgram.use();
     self._outputProgram.setUniforms({
       u_sampler: 0
-    });
+    });*/
     // self._framebuffer = new Framebuffer(gl, {
     //   width: gl.canvas.width,
     //   height: gl.canvas.height,
@@ -2056,29 +1919,15 @@ Scene.prototype._setViewport = function (x, y, width, height) {
 
 Scene.prototype.draw = function () {
   var self = this,
-    sceneProgram = self._sceneProgram,
-    outputProgram = self._outputProgram,
+    // outputProgram = self._outputProgram,
     camera = self._camera,
     gl = self._gl,
-    lightPosition = vec3.create();
+    lightPosition = self._lightViewPosition,
+    viewMatrix = camera.getViewMatrix(),
+    uniforms = self._uniforms;
   self._dirty = false;
   // self._framebuffer.bind();
-  sceneProgram.use();
-  vec3.transformMat4(lightPosition, self._lightPosition, camera.getViewMatrix());
-  sceneProgram.setUniforms({
-    u_lightPosition: lightPosition,
-    u_lightColor: self._lightColor,
-    u_ambientColor: self._ambientColor,
-    u_wireframeColor: self._wireframeColor,
-    u_wireframeWidth: self._wireframeWidth,
-    u_wireframeOnly: self._wireframeOnly,
-    u_samplerImage: 0,
-    u_samplerNormal: 1,
-    u_samplerCubeImage: 2,
-    u_samplerEnv: 3,
-    u_viewMatrix: camera.getViewMatrix(),
-    u_clipPlane: self._clipPane
-  });
+  vec3.transformMat4(lightPosition, self._lightPosition, viewMatrix);
 
   gl.disable(gl.BLEND);
   gl.depthMask(true);
@@ -2086,7 +1935,7 @@ Scene.prototype.draw = function () {
     if (object.visible === false) {
       return;
     }
-    if (!object.transparent) {
+    if (!object.material.transparent) {
       drawObject(object);
     }
   });
@@ -2097,7 +1946,7 @@ Scene.prototype.draw = function () {
     if (object.visible === false) {
       return;
     }
-    if (object.transparent) {
+    if (object.material.transparent) {
       drawObject(object);
     }
   });
@@ -2105,7 +1954,7 @@ Scene.prototype.draw = function () {
   gl.disable(gl.BLEND);
   gl.depthMask(true);
 
-  self._outlineEffect.pass();
+  // self._outlineEffect.pass();
 
   /*if (self._enableSSAO) {
     self._ssaoEffect.pass(self._framebuffer);
@@ -2121,66 +1970,87 @@ Scene.prototype.draw = function () {
     // self._fxaaEffect.pass(self._framebuffer);
   }*/
 
-  self._glowEffect.pass();
+  // self._glowEffect.pass();
 
   function drawObject (object) {
     var vao = self.getVertexArray(object),
-      cubeMap = object.image && object.image.type === 'CUBE_MAP';
-    if (vao) {
-      object._refreshViewMatrix(camera.getViewMatrix(), camera.getProjectMatrix());
-      sceneProgram.setUniforms({
-        u_modelMatrix: object._modelMatrix,
-        u_normalMatrix: object._normalMatrix,
-        u_normalViewMatrix: object._normalViewMatrix,
-        u_modelViewInvMatrix: object._modelViewInvMatrix,
-        u_texture: !!object.image,
-        u_wireframe: !!object.wireframe,
-        u_textureScale: object.textureScale,
-        u_normalMap: !!object.imageNormal,
-        u_modelViewMatrix: object._modelViewMatrix,
-        u_modelViewProjectMatrix: object._modelViewProjectMatrix,
-        u_light: object.light !== false,
-        u_cubeMap: cubeMap,
-        u_envMap: !!object.imageEnv
-      });
-      if (object.image) {
-        if (cubeMap) {
-          gl.cache.emptyTexture.bind(0);
-          gl.cache.textures.get(object.image).bind(2);
-        } else {
-          gl.cache.textures.get(object.image).bind(0);
-          gl.cache.emptyCubeTexture.bind(2);
-        }
-        if (object.imageNormal) {
-          gl.cache.textures.get(object.imageNormal).bind(1);
-        } else {
-          gl.cache.emptyTexture.bind(1);
-        }
-      } else {
-        gl.cache.emptyTexture.bind(0);
-        gl.cache.emptyTexture.bind(1);
-        gl.cache.emptyCubeTexture.bind(2);
-        if (!vao._color) {
-          gl.vertexAttrib4fv(attributesMap.color.index, object.color);
-        }
-      }
-      if (object.imageEnv) {
-        gl.cache.textures.get(object.imageEnv).bind(3);
-      } else {
-        gl.cache.emptyCubeTexture.bind(3);
-      }
-      vao.draw(preDrawCallback);
+      material = object.material,
+      key, program;
+    if (!vao) {
+      return;
     }
+    key = material.getKey();
+    program = self._programs[key];
+    if (!program) {
+      program = self._programs[key] = createProgram(gl, material._keys);
+    }
+
+    object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
+
+    uniforms.u_viewMatrix = viewMatrix;
+    uniforms.u_lightPosition = lightPosition;
+    uniforms.u_lightColor = self._lightColor;
+    uniforms.u_lightAmbientColor = self._ambientColor;
+
+    uniforms.u_modelMatrix = object._modelMatrix;
+    uniforms.u_normalMatrix = object._normalMatrix;
+    uniforms.u_normalViewMatrix = object._normalViewMatrix;
+    uniforms.u_modelViewInvMatrix = object._modelViewInvMatrix;
+    uniforms.u_modelViewMatrix = object._modelViewMatrix;
+    uniforms.u_modelViewProjectMatrix = object._modelViewProjectMatrix;
+    uniforms.u_modelViewMatrix3 = object._modelViewMatrix3;
+
+    uniforms.u_textureScale = material.textureScale;
+    uniforms.u_wireframeColor = material.wireframeColor;
+    uniforms.u_wireframeWidth = material.wireframeWidth;
+    uniforms.u_wireframeOnly = material.wireframeOnly;
+    uniforms.u_clipPlane = material.clipPlane;
+    uniforms.u_ambientColor = material.ambientColor;
+    uniforms.u_diffuseColor = material.diffuseColor;
+    uniforms.u_emissionColor = material.emissionColor;
+    uniforms.u_specularColor = material.specularColor;
+    uniforms.u_shininess = material.shininess;
+    uniforms.u_transparency = material.transparency;
+
+    // TODO material.vertexColor
+
+    program.use();
+    program.setUniforms(uniforms);
+
+    if (material.doubleSided) {
+      gl.disable(gl.CULL_FACE);
+    } else {
+      gl.enable(gl.CULL_FACE);
+    }
+
+    if (material.envImage) {
+      gl.cache.textures.get(material.envImage).bind(0);
+    }
+    if (material.normalImage) {
+      gl.cache.textures.get(material.normalImage).bind(1);
+    }
+    if (material.ambientImage) {
+      gl.cache.textures.get(material.ambientImage).bind(2);
+    }
+    if (material.diffuseImage) {
+      gl.cache.textures.get(material.diffuseImage).bind(3);
+    }
+    if (material.emissionImage) {
+      gl.cache.textures.get(material.emissionImage).bind(4);
+    }
+    if (material.specularImage) {
+      gl.cache.textures.get(material.specularImage).bind(5);
+    }
+
+    vao.draw(preDrawCallback);
   }
 
   function preDrawCallback (part) {
-    sceneProgram.setUniforms({
-      u_texture: !!part.image
-    });
-    if (part.image) {
-      gl.cache.textures.get(part.image).bind(0);
+    // TODO change program
+    if (part.diffuseImage) {
+      gl.cache.textures.get(part.diffuseImage).bind(2);
     } else {
-      gl.vertexAttrib4fv(attributesMap.color.index, part.color);
+      program.setUniform('u_diffuseColor', part.diffuseColor);
     }
   }
 };
@@ -2353,48 +2223,12 @@ Scene.prototype.setClearColor = function (clearColor) {
   this.redraw();
 };
 
-Scene.prototype.getWireframeColor = function () {
-  return this._wireframeColor;
-};
-
-Scene.prototype.setWireframeColor = function (wireframeColor) {
-  this._wireframeColor = wireframeColor;
-  this.redraw();
-};
-
-Scene.prototype.getWireframeWidth = function () {
-  return this._wireframeWidth;
-};
-
-Scene.prototype.setWireframeWidth = function (wireframeWidth) {
-  this._wireframeWidth = wireframeWidth;
-  this.redraw();
-};
-
-Scene.prototype.getWireframeOnly = function () {
-  return this._wireframeOnly;
-};
-
-Scene.prototype.setWireframeOnly = function (wireframeOnly) {
-  this._wireframeOnly = wireframeOnly;
-  this.redraw();
-};
-
 Scene.prototype.getEnableSSAO = function () {
   return this._enableSSAO;
 };
 
 Scene.prototype.setEnableSSAO = function (enableSSAO) {
   this._enableSSAO = enableSSAO;
-  this.redraw();
-};
-
-Scene.prototype.getClipPane = function () {
-  return this._clipPane;
-};
-
-Scene.prototype.setClipPane = function (clipPane) {
-  this._clipPane = clipPane;
   this.redraw();
 };
 
@@ -3410,7 +3244,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
       if (object.visible === false) {
         return;
       }
-      if (!object.glow && !object.transparent) {
+      if (!object.glow && !object.material.transparent) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
@@ -3907,10 +3741,20 @@ wg.Object = function () {
   self._position = vec3.create();
   self._scale = vec3.fromValues(1, 1, 1);
   self._rotation = vec3.fromValues(0, 0, 0);
-  self.textureScale = vec2.fromValues(1, 1);
-  self.color = [1, 1, 1, 1];
   self._matrixDirty = false;
+  self.material = new Material();
 };
+
+[
+  {
+    name: 'clipPlane',
+    value: null
+  },
+].forEach(function (property) {
+  defineProperty(wg.Object.prototype, property.name, property.value, function (property, oldValue, newValue) {
+    this.material.clip = !!newValue;
+  });
+});
 
 wg.Object.prototype.setPosition = function (x, y, z) {
   var self = this;
@@ -4172,20 +4016,26 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
           });
         } else {
           result.parts.push(part = partMap[materialName] = {
-            color: material.Kd,
             counts: [counts = {
               offset: offset,
               count: 0
             }],
             name: materialName,
-            alpha: material.d,
+            ambientColor: material.Ka,
+            diffuseColor: material.Kd,
+            specularColor: material.Ks,
+            transparency: material.d,
+            shininess: material.Ns,
             blending: material.d < 1
           });
+          if (material.map_Ka) {
+            part.ambientImage = urlPath + material.map_Ka;
+          }
           if (material.map_Kd) {
-            part.image = urlPath + material.map_Kd;
-            if (material.map_Ks) {
-              part['specularImage'] = urlPath + material.map_Ks;
-            }
+            part.diffuseImage = urlPath + material.map_Kd;
+          }
+          if (material.map_Ks) {
+            part.specularImage = urlPath + material.map_Ks;
           }
           if (part.blending) {
             result.blending = true;
@@ -4390,17 +4240,177 @@ GLTFParser.parse = function (urlPath, name, callback) {
 
 // Source: src/material/Material.js
 var Material = wg.Material = function () {
-  ;
+  var self = this;
+  self._dirty = true;
+  self._key = '';
+  self._keys = [];
+  self.textureScale = vec2.fromValues(1, 1);
 };
 
-Object.defineProperty(Material.prototype, 'diffuseColor', {
-  configurable: true,
-  enumerable: true,
-  get: function () {
-    return this._diffuseColor;
+[
+  {
+    name: 'ambientColor',
+    value: [1, 1, 1, 1]
   },
-  set: function (value) {
-    this._diffuseColor = value;
-  }
+  {
+    name: 'ambientImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'diffuseColor',
+    value: [0.5, 0.5, 0.5, 1]
+  },
+  {
+    name: 'diffuseImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'emissionColor',
+    value: [0, 0, 0, 1]
+  },
+  {
+    name: 'emissionImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'specularColor',
+    value: [1, 1, 1, 1]
+  },
+  {
+    name: 'specularImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'doubleSided',
+    value: false
+  },
+  {
+    name: 'shininess',
+    value: 10.0
+  },
+  {
+    name: 'transparency',
+    value: 1.0
+  },
+  {
+    name: 'transparent',
+    value: false
+  },
+  {
+    name: 'light',
+    value: true,
+    dirty: true
+  },
+  {
+    name: 'clip',
+    value: false,
+    dirty: true
+  },
+  {
+    name: 'wireframe',
+    value: false,
+    dirty: true
+  },
+  {
+    name: 'wireframeOnly',
+    value: true,
+    dirty: true
+  },
+  {
+    name: 'wireframeColor',
+    value: [69.0/255.0, 132.0/255.0, 206.0/255.0]
+  },
+  {
+    name: 'wireframeWidth',
+    value: 2.0
+  },
+  {
+    name: 'vertexColor',
+    value: false,
+    dirty: true
+  },
+  {
+    name: 'envImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'normalImage',
+    value: null,
+    dirty: true
+  },
+].forEach(function (property) {
+  defineProperty(Material.prototype, property.name, property.value, property.dirty ? function () {
+    this._dirty = true;
+  } : null);
 });
+
+Material.prototype.getKey = function () {
+  /*
+  CLIPPLANE: u_clipPlane, u_modelMatrix
+
+  WIREFRAME: a_barycentric, u_wireframeColor, u_wireframeWidth
+  WIREFRAME_ONLY
+
+  VERTEX_COLOR: a_color
+
+  ENV_MAP: u_viewMatrix, u_modelViewInvMatrix, u_envSampler
+  NORMAL_MAP: u_normalSampler
+
+  LIGHT: u_modelViewMatrix, u_normalViewMatrix, u_lightPosition
+
+  DIFFUSE_MAP: u_diffuseSampler
+  DIFFUSE_CUBE_MAP: u_diffuseSampler
+
+  a_tangent: LIGHT && NORMAL_MAP
+  a_normal: (DIFFUSE_MAP && DIFFUSE_CUBE_MAP) || (LIGHT || ENV_MAP)
+  a_uv, u_textureScale: (DIFFUSE_MAP && !DIFFUSE_CUBE_MAP) || (LIGHT && NORMAL_MAP)
+  u_normalMatrix: DIFFUSE_MAP && DIFFUSE_CUBE_MAP
+  u_normalViewMatrix: LIGHT || ENV_MAP
+  u_diffuseColor: !DIFFUSE_MAP
+   */
+  var self = this,
+    keys;
+  if (self._dirty) {
+    self._dirty = false;
+    keys = self._keys = []
+    if (self._clip) {
+      keys.push('CLIPPLANE');
+    }
+    if (self._wireframe) {
+      keys.push('WIREFRAME');
+      if (self._wireframeOnly) {
+        keys.push('WIREFRAME_ONLY');
+      }
+    }
+    if (!self._wireframe || !self._wireframeOnly) {
+      if (self._vertexColor) {
+        keys.push('VERTEX_COLOR');
+      } else {
+        if (self._diffuseImage) {
+          if (self._diffuseImage.type === 'CUBE_MAP') {
+            keys.push('DIFFUSE_CUBE_MAP');
+          } else {
+            keys.push('DIFFUSE_MAP');
+          }
+        }
+      }
+      if (self._envImage) {
+        keys.push('ENV_MAP');
+      }
+      if (self._light) {
+        keys.push('LIGHT');
+        if (self._normalImage) {
+          keys.push('NORMAL_MAP');
+        }
+      }
+    }
+    self._key = keys.join(':');
+  }
+  return self._key;
+};
 }(this);
