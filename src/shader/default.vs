@@ -52,7 +52,7 @@ uniform mat4 u_modelViewProjectMatrix;
 
 #ifdef CLIPPLANE
   uniform mat4 u_modelMatrix;
-  varying vec4 v_woldPosition;
+  varying vec4 v_position;
 #endif
 
 void main () {
@@ -108,6 +108,6 @@ void main () {
   #endif
 
   #ifdef CLIPPLANE
-    v_woldPosition = u_modelMatrix * position;
+    v_position = position;
   #endif
 }

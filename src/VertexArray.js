@@ -1,7 +1,7 @@
 /**
  * VertexArray
- * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
- * @param {[Object]} options
+ * @param {WebGLRenderingContext} gl WebGLRenderingContext
+ * @param {Object} options
  * @example
  *     buffers: { position: [], normal: [], uv: [], color: [], index: [] },
  *     offset: 0,

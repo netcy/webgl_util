@@ -16,17 +16,6 @@ wg.Object = function () {
   self.material = new Material();
 };
 
-[
-  {
-    name: 'clipPlane',
-    value: null
-  },
-].forEach(function (property) {
-  defineProperty(wg.Object.prototype, property.name, property.value, function (property, oldValue, newValue) {
-    this.material.clip = !!newValue;
-  });
-});
-
 wg.Object.prototype.setPosition = function (x, y, z) {
   var self = this;
   vec3.set(self._position, x, y, z);

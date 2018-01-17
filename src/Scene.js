@@ -335,83 +335,84 @@ Scene.prototype.draw = function () {
 
   function drawObject (object) {
     var vao = self.getVertexArray(object),
-      material = object.material,
-      key, program;
+      material = object.material;
     if (!vao) {
       return;
-    }
-    key = material.getKey();
-    program = self._programs[key];
-    if (!program) {
-      program = self._programs[key] = createProgram(gl, material._keys);
     }
 
     object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
 
-    uniforms.u_viewMatrix = viewMatrix;
-    uniforms.u_lightPosition = lightPosition;
-    uniforms.u_lightColor = self._lightColor;
-    uniforms.u_lightAmbientColor = self._ambientColor;
-
-    uniforms.u_modelMatrix = object._modelMatrix;
-    uniforms.u_normalMatrix = object._normalMatrix;
-    uniforms.u_normalViewMatrix = object._normalViewMatrix;
-    uniforms.u_modelViewInvMatrix = object._modelViewInvMatrix;
-    uniforms.u_modelViewMatrix = object._modelViewMatrix;
-    uniforms.u_modelViewProjectMatrix = object._modelViewProjectMatrix;
-    uniforms.u_modelViewMatrix3 = object._modelViewMatrix3;
-
-    uniforms.u_textureScale = material.textureScale;
-    uniforms.u_wireframeColor = material.wireframeColor;
-    uniforms.u_wireframeWidth = material.wireframeWidth;
-    uniforms.u_wireframeOnly = material.wireframeOnly;
-    uniforms.u_clipPlane = material.clipPlane;
-    uniforms.u_ambientColor = material.ambientColor;
-    uniforms.u_diffuseColor = material.diffuseColor;
-    uniforms.u_emissionColor = material.emissionColor;
-    uniforms.u_specularColor = material.specularColor;
-    uniforms.u_shininess = material.shininess;
-    uniforms.u_transparency = material.transparency;
-
-    // TODO material.vertexColor
-
-    program.use();
-    program.setUniforms(uniforms);
-
-    if (material.doubleSided) {
-      gl.disable(gl.CULL_FACE);
-    } else {
-      gl.enable(gl.CULL_FACE);
-    }
-
-    if (material.envImage) {
-      gl.cache.textures.get(material.envImage).bind(0);
-    }
-    if (material.normalImage) {
-      gl.cache.textures.get(material.normalImage).bind(1);
-    }
-    if (material.ambientImage) {
-      gl.cache.textures.get(material.ambientImage).bind(2);
-    }
-    if (material.diffuseImage) {
-      gl.cache.textures.get(material.diffuseImage).bind(3);
-    }
-    if (material.emissionImage) {
-      gl.cache.textures.get(material.emissionImage).bind(4);
-    }
-    if (material.specularImage) {
-      gl.cache.textures.get(material.specularImage).bind(5);
+    if (!vao._parts) {
+      setProgram(material);
     }
 
     vao.draw(preDrawCallback);
-  }
 
-  function preDrawCallback (part) {
-    // TODO change program
-    if (part.diffuseImage) {
-      gl.cache.textures.get(part.diffuseImage).bind(2);
-    } else {
-      program.setUniform('u_diffuseColor', part.diffuseColor);
+    function setProgram (material) {
+      var key = material.getKey(),
+        program = self._programs[key];
+      if (!program) {
+        program = self._programs[key] = createProgram(gl, material._keys);
+      }
+
+      uniforms.u_viewMatrix = viewMatrix;
+      uniforms.u_lightPosition = lightPosition;
+      uniforms.u_lightColor = self._lightColor;
+      uniforms.u_lightAmbientColor = self._ambientColor;
+
+      uniforms.u_modelMatrix = object._modelMatrix;
+      uniforms.u_normalMatrix = object._normalMatrix;
+      uniforms.u_normalViewMatrix = object._normalViewMatrix;
+      uniforms.u_modelViewInvMatrix = object._modelViewInvMatrix;
+      uniforms.u_modelViewMatrix = object._modelViewMatrix;
+      uniforms.u_modelViewProjectMatrix = object._modelViewProjectMatrix;
+      uniforms.u_modelViewMatrix3 = object._modelViewMatrix3;
+
+      uniforms.u_textureScale = material.textureScale;
+      uniforms.u_wireframeColor = material.wireframeColor;
+      uniforms.u_wireframeWidth = material.wireframeWidth;
+      uniforms.u_wireframeOnly = material.wireframeOnly;
+      uniforms.u_clipPlane = material.clipPlane;
+      uniforms.u_ambientColor = material.ambientColor;
+      uniforms.u_diffuseColor = material.diffuseColor;
+      uniforms.u_emissionColor = material.emissionColor;
+      uniforms.u_specularColor = material.specularColor;
+      uniforms.u_shininess = material.shininess;
+      uniforms.u_transparency = material.transparency;
+
+      // TODO material.vertexColor
+
+      program.use();
+      program.setUniforms(uniforms);
+
+      if (material.doubleSided) {
+        gl.disable(gl.CULL_FACE);
+      } else {
+        gl.enable(gl.CULL_FACE);
+      }
+
+      if (material.envImage) {
+        gl.cache.textures.get(material.envImage).bind(0);
+      }
+      if (material.normalImage) {
+        gl.cache.textures.get(material.normalImage).bind(1);
+      }
+      if (material.ambientImage) {
+        gl.cache.textures.get(material.ambientImage).bind(2);
+      }
+      if (material.diffuseImage) {
+        gl.cache.textures.get(material.diffuseImage).bind(3);
+      }
+      if (material.emissionImage) {
+        gl.cache.textures.get(material.emissionImage).bind(4);
+      }
+      if (material.specularImage) {
+        gl.cache.textures.get(material.specularImage).bind(5);
+      }
+    }
+
+    function preDrawCallback (part) {
+      setProgram(part.material);
     }
   }
 };

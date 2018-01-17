@@ -1,7 +1,7 @@
 /**
  * Texture
- * @param {[WebGLRenderingContext]} gl WebGLRenderingContext
- * @param {[Object]} options
+ * @param {WebGLRenderingContext} gl WebGLRenderingContext
+ * @param {Object} options
  * @example
  *     url: default undefinded, should input url or width&height
  *     width: default undefinded

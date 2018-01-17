@@ -30,7 +30,8 @@ function init () {
     wrapS: 'REPEAT',
     wrapT: 'REPEAT'
   };
-  box.material.clipPlane = [0, 1, 0, 0];
+  box.material.doubleSided = true;
+  box.material.clipPlane = [0, 1, 0, 0.5];
   // box.material.diffuseColor = [0.6, 0.6, 0.6, 1];
   // box.outline = true;
   scene.add(box);

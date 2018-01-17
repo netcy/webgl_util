@@ -65,8 +65,8 @@ var Material = wg.Material = function () {
     dirty: true
   },
   {
-    name: 'clip',
-    value: false,
+    name: 'clipPlane',
+    value: null,
     dirty: true
   },
   {
@@ -103,7 +103,7 @@ var Material = wg.Material = function () {
     dirty: true
   },
 ].forEach(function (property) {
-  defineProperty(Material.prototype, property.name, property.value, property.dirty ? function () {
+  defineProperty(Material.prototype, property.name, property.value, property.dirty ? function (property, oldValue, newValue) {
     this._dirty = true;
   } : null);
 });
@@ -137,7 +137,7 @@ Material.prototype.getKey = function () {
   if (self._dirty) {
     self._dirty = false;
     keys = self._keys = []
-    if (self._clip) {
+    if (self._clipPlane) {
       keys.push('CLIPPLANE');
     }
     if (self._wireframe) {
@@ -165,6 +165,15 @@ Material.prototype.getKey = function () {
         keys.push('LIGHT');
         if (self._normalImage) {
           keys.push('NORMAL_MAP');
+        }
+        if (self._ambientImage) {
+          keys.push('AMBIENT_MAP');
+        }
+        if (self._specularImage) {
+          keys.push('SPECULAR_MAP');
+        }
+        if (self._emissionImage) {
+          keys.push('EMISSION_MAP');
         }
       }
     }

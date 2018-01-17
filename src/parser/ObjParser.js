@@ -36,15 +36,7 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
     partMap = {},
     materialName, material, counts;
 
-  materials['default'] = {
-    Ka: [0, 0, 0, 1],
-    Kd: [0.5, 0.5, 0.5, 1],
-    Ks: [0, 0, 0, 1],
-    Ns: 0,
-    Ni: 0,
-    d: 1,
-    illum: 0
-  };
+  materials['default'] = new Material();
   // https://en.wikipedia.org/wiki/Wavefront_.obj_file
   // http://paulbourke.net/dataformats/mtl/
   // http://paulbourke.net/dataformats/obj/
@@ -62,70 +54,69 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
     switch (command) {
       case 'newmtl': {
         material = line[0];
-        material = materials[material] = {
-          d: 1
-        };
+        material = materials[material] = new Material();
         break;
       }
       // ambient reflectivity of the current material
       case 'Ka': {
-        material.Ka = [+line[0], +line[1], +line[2], line[3] == null ? 1 : +line[3]];
+        material.ambientColor = [+line[0], +line[1], +line[2], line[3] == null ? 1 : +line[3]];
         break;
       }
       // diffuse reflectivity of the current material
       case 'Kd': {
-        material.Kd = [+line[0], +line[1], +line[2], line[3] == null ? 1 : +line[3]];
+        material.diffuseColor = [+line[0], +line[1], +line[2], line[3] == null ? 1 : +line[3]];
         break;
       }
       // specular reflectivity of the current material
       case 'Ks': {
-        material.Ks = [+line[0], +line[1], +line[2], line[3] == null ? 1 : +line[3]];
+        material.specularColor = [+line[0], +line[1], +line[2], line[3] == null ? 1 : +line[3]];
         break;
       }
       // Specifies the specular exponent for the current material.
       // This defines the focus of the specular highlight.
       case 'Ns': {
-        material.Ns = +line[0];
+        material.shininess = +line[0];
         break;
       }
-      case 'Ni': {
+      /*case 'Ni': {
         material.Ni = +line[0];
-        break;
-      }
-      // dissolve for the current material:
-      // 1.0 is fully opaque, 0.0 is fully dissolved (completely transparent)
-      case 'd': {
-        material.d = +line[0];
         break;
       }
       case 'illum': {
         material.illum = +line[0];
         break;
+      }*/
+      // dissolve for the current material:
+      // 1.0 is fully opaque, 0.0 is fully dissolved (completely transparent)
+      case 'd': {
+        material.transparency = +line[0];
+        material.transparent = material.transparency !== 1.0;
+        break;
       }
       // diffuse reflectivity of the material
       case 'map_Kd': {
-        material.map_Kd = line[line.length - 1];
+        material.diffuseImage = urlPath + line[line.length - 1];
         break;
       }
       // ambient reflectivity of the material
       case 'map_Ka': {
-        material.map_Ka = line[line.length - 1];
+        material.ambientImage = urlPath + line[line.length - 1];
         break;
       }
       // specular reflectivity of the material
       case 'map_Ks': {
-        material.map_Ks = line[line.length - 1];
+        material.specularImage = urlPath + line[line.length - 1];
         break;
       }
     }
   });
 
   function addIndex (segment) {
-    var index = null;//allIndices.get(segment);
+    var index = allIndices.get(segment);
     if (index != null) {
       result.indices.push(index);
     } else {
-      // allIndices.set(segment, index = result.index);
+      allIndices.set(segment, index = result.index);
       result.indices.push(result.index);
       result.index += 1;
 
@@ -193,25 +184,8 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
               count: 0
             }],
             name: materialName,
-            ambientColor: material.Ka,
-            diffuseColor: material.Kd,
-            specularColor: material.Ks,
-            transparency: material.d,
-            shininess: material.Ns,
-            blending: material.d < 1
+            material: material
           });
-          if (material.map_Ka) {
-            part.ambientImage = urlPath + material.map_Ka;
-          }
-          if (material.map_Kd) {
-            part.diffuseImage = urlPath + material.map_Kd;
-          }
-          if (material.map_Ks) {
-            part.specularImage = urlPath + material.map_Ks;
-          }
-          if (part.blending) {
-            result.blending = true;
-          }
         }
         break;
       }
@@ -232,7 +206,6 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
     normal: result.normals,
     uv: result.uvs,
     index: result.indices,
-    parts: result.parts,
-    blending: result.blending
+    parts: result.parts
   };
 };

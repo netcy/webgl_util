@@ -34,9 +34,21 @@
 #ifdef LIGHT
   uniform vec3 u_lightColor;
   uniform vec3 u_lightAmbientColor;
-  uniform vec4 u_ambientColor;
-  uniform vec4 u_specularColor;
-  uniform vec4 u_emissionColor;
+  #ifdef AMBIENT_MAP
+    uniform sampler2D u_ambientSampler;
+  #else
+    uniform vec4 u_ambientColor;
+  #endif
+  #ifdef SPECULAR_MAP
+    uniform sampler2D u_specularSampler;
+  #else
+    uniform vec4 u_specularColor;
+  #endif
+  #ifdef EMISSION_MAP
+    uniform sampler2D u_emissionSampler;
+  #else
+    uniform vec4 u_emissionColor;
+  #endif
   uniform float u_shininess;
   varying vec3 v_lightDirection;
   varying vec3 v_eyeDirection;
@@ -56,15 +68,15 @@
 
 #ifdef CLIPPLANE
   uniform vec4 u_clipPlane;
-  varying vec4 v_woldPosition;
+  varying vec4 v_position;
 #endif
 
 uniform float u_transparency;
 
 void main () {
   #ifdef CLIPPLANE
-    float clipDistance = dot(v_woldPosition.xyz, u_clipPlane.xyz);
-    if (clipDistance > u_clipPlane.w) {
+    float clipDistance = dot(v_position.xyz, u_clipPlane.xyz);
+    if (clipDistance >= u_clipPlane.w) {
       discard;
     }
   #endif
@@ -113,9 +125,21 @@ void main () {
         specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), u_shininess);
       }
 
-      vec3 ambientColor = u_lightAmbientColor * u_ambientColor.rgb * color.rgb;
+      #ifdef AMBIENT_MAP
+        vec4 ambientMaterialColor = texture2D(u_ambientSampler, v_uv);
+      #else
+        vec4 ambientMaterialColor = u_ambientColor;
+      #endif
+
+      #ifdef SPECULAR_MAP
+        vec4 specularMaterialColor = texture2D(u_specularSampler, v_uv);
+      #else
+        vec4 specularMaterialColor = u_specularColor;
+      #endif
+
+      vec3 ambientColor = u_lightAmbientColor * ambientMaterialColor.rgb * color.rgb;
       vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
-      vec3 specularColor = u_lightColor * u_specularColor.rgb * specular;
+      vec3 specularColor = u_lightColor * specularMaterialColor.rgb * specular;
       color = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
     #endif
     #ifdef WIREFRAME

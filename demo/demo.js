@@ -17,7 +17,7 @@ function init () {
   scene.setLightPosition([4.0, 4.0, 4.0]);
   // scene.setAmbientColor([0.4, 0.4, 0.4]);
 
-  // var gui = createGUI(scene);
+  var gui = createGUI(scene);
 
   /*var floor = new wg.Cube();
   vec2.set(floor.material.textureScale, 100, 100);
@@ -104,11 +104,11 @@ function init () {
     halfCount = (current - 1.0) * 0.5 * spread;
   }*/
 
-  var box = new wg.Sphere();
+  var box = new wg.Cube();
   // box.material.wireframe = true;
   // box.material.wireframeWidth = 2;
-  box.material.wireframeOnly = false;
-  // box.material.light = false;
+  // box.material.wireframeOnly = false;
+  box.material.light = false;
   // box.material.doubleSided = true;
   // box.setScale(1.0, 1.0, 1.0);
   // box.setPosition(0.0, 1.7, 0.0);
@@ -121,8 +121,8 @@ function init () {
     wrapT: 'REPEAT'
   };
   box.material.diffuseColor = [0, 0, 1, 1];
-  box.material.transparent = true;
-  box.material.transparency = 0.5;
+  // box.material.transparent = true;
+  // box.material.transparency = 0.5;
   // box.outline = true;
   scene.add(box);
 
