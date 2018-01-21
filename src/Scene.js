@@ -45,7 +45,7 @@ var Scene = wg.Scene = function (canvas, options) {
     u_normalSampler: 1,
     u_ambientSampler: 2,
     u_diffuseSampler: 3,
-    u_emissionSampler: 4,
+    u_emissiveSampler: 4,
     u_specularSampler: 5
   };
   self._camera = new Camera(self);
@@ -375,7 +375,7 @@ Scene.prototype.draw = function () {
       uniforms.u_clipPlane = material.clipPlane;
       uniforms.u_ambientColor = material.ambientColor;
       uniforms.u_diffuseColor = material.diffuseColor;
-      uniforms.u_emissionColor = material.emissionColor;
+      uniforms.u_emissiveColor = material.emissiveColor;
       uniforms.u_specularColor = material.specularColor;
       uniforms.u_shininess = material.shininess;
       uniforms.u_transparency = material.transparency;
@@ -403,8 +403,8 @@ Scene.prototype.draw = function () {
       if (material.diffuseImage) {
         gl.cache.textures.get(material.diffuseImage).bind(3);
       }
-      if (material.emissionImage) {
-        gl.cache.textures.get(material.emissionImage).bind(4);
+      if (material.emissiveImage) {
+        gl.cache.textures.get(material.emissiveImage).bind(4);
       }
       if (material.specularImage) {
         gl.cache.textures.get(material.specularImage).bind(5);

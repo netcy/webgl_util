@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.22.0] - 2018-01-21
+### Fixed
+- Shading light logic
+
+
 ## [0.21.0] - 2018-01-17
 ### Changed
 - ObjParser use Material

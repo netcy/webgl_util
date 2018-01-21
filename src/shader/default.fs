@@ -9,16 +9,11 @@
   #else
     uniform sampler2D u_diffuseSampler;
   #endif
-#else
-  uniform vec4 u_diffuseColor;
 #endif
+uniform vec4 u_diffuseColor;
 
 #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))
   varying vec2 v_uv;
-#endif
-
-#ifdef NORMAL_MAP
-  uniform sampler2D u_normalSampler;
 #endif
 
 #if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)
@@ -44,10 +39,13 @@
   #else
     uniform vec4 u_specularColor;
   #endif
-  #ifdef EMISSION_MAP
-    uniform sampler2D u_emissionSampler;
+  #ifdef EMISSIVE_MAP
+    uniform sampler2D u_emissiveSampler;
   #else
-    uniform vec4 u_emissionColor;
+    uniform vec4 u_emissiveColor;
+  #endif
+  #ifdef NORMAL_MAP
+    uniform sampler2D u_normalSampler;
   #endif
   uniform float u_shininess;
   varying vec3 v_lightDirection;
@@ -84,18 +82,18 @@ void main () {
   #if defined(WIREFRAME) && defined(WIREFRAME_ONLY)
     gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
   #else
-    #ifdef VERTEX_COLOR
-      vec4 color = v_color;
-    #else
-      #ifdef DIFFUSE_MAP
-        #ifdef DIFFUSE_CUBE_MAP
-          vec4 color = textureCube(u_diffuseSampler, v_normal);
-        #else
-          vec4 color = texture2D(u_diffuseSampler, v_uv);
-        #endif
+    #ifdef DIFFUSE_MAP
+      #ifdef DIFFUSE_CUBE_MAP
+        vec4 color = textureCube(u_diffuseSampler, v_normal);
       #else
-        vec4 color = u_diffuseColor;
+        vec4 color = texture2D(u_diffuseSampler, v_uv);
       #endif
+    #else
+      vec4 color = vec4(1.0);
+    #endif
+
+    #ifdef VERTEX_COLOR
+      color *= v_color;
     #endif
 
     #ifdef ENV_MAP
@@ -126,9 +124,9 @@ void main () {
       }
 
       #ifdef AMBIENT_MAP
-        vec4 ambientMaterialColor = texture2D(u_ambientSampler, v_uv);
+        vec3 ambientSamplerColor = texture2D(u_ambientSampler, v_uv).rgb;
       #else
-        vec4 ambientMaterialColor = u_ambientColor;
+        vec3 ambientSamplerColor = vec3(1.0);
       #endif
 
       #ifdef SPECULAR_MAP
@@ -137,10 +135,18 @@ void main () {
         vec4 specularMaterialColor = u_specularColor;
       #endif
 
-      vec3 ambientColor = u_lightAmbientColor * ambientMaterialColor.rgb * color.rgb;
-      vec3 diffuseColor = u_lightColor * color.rgb * diffuse;
+      vec4 emissiveColor = u_emissiveColor;
+      #ifdef EMISSIVE_MAP
+        emissiveColor += texture2D(u_emissiveSampler, v_uv);
+      #endif
+
+      vec3 ambientColor = u_lightAmbientColor * u_ambientColor.rgb;
+      vec3 diffuseColor = u_lightColor * u_diffuseColor.rgb * diffuse;
       vec3 specularColor = u_lightColor * specularMaterialColor.rgb * specular;
-      color = clamp(vec4(ambientColor + diffuseColor + specularColor, color.a), 0.0, 1.0);
+      vec3 finalColor = clamp(ambientColor + diffuseColor + emissiveColor.rgb, 0.0, 1.0);
+      finalColor *= color.rgb * ambientSamplerColor;
+      finalColor += specularColor/* + reflectionColor + refractionColor*/;
+      color = vec4(finalColor, u_diffuseColor.a * color.a);
     #endif
     #ifdef WIREFRAME
       gl_FragColor = mix(vec4(u_wireframeColor, 1.0), color, edgeFactor());

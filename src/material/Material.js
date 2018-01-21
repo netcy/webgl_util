@@ -26,11 +26,11 @@ var Material = wg.Material = function () {
     dirty: true
   },
   {
-    name: 'emissionColor',
+    name: 'emissiveColor',
     value: [0, 0, 0, 1]
   },
   {
-    name: 'emissionImage',
+    name: 'emissiveImage',
     value: null,
     dirty: true
   },
@@ -172,8 +172,8 @@ Material.prototype.getKey = function () {
         if (self._specularImage) {
           keys.push('SPECULAR_MAP');
         }
-        if (self._emissionImage) {
-          keys.push('EMISSION_MAP');
+        if (self._emissiveImage) {
+          keys.push('EMISSIVE_MAP');
         }
       }
     }
