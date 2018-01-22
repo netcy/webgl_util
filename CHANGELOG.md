@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.23.0] - 2018-01-22
+### Added
+- Morph targets
+
+### Changed
+- Use dynamic but not fixed attribute location
+
+### Fixed
+- Obj transparent part bug
+
+
 ## [0.22.0] - 2018-01-21
 ### Fixed
 - Shading light logic

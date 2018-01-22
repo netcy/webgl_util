@@ -292,24 +292,22 @@ Scene.prototype.draw = function () {
 
   gl.disable(gl.BLEND);
   gl.depthMask(true);
+  gl._transparent = false;
   self._objects.forEach(function (object) {
     if (object.visible === false) {
       return;
     }
-    if (!object.material.transparent) {
-      drawObject(object);
-    }
+    drawObject(object);
   });
 
   gl.enable(gl.BLEND);
   gl.depthMask(false);
+  gl._transparent = true;
   self._objects.forEach(function (object) {
     if (object.visible === false) {
       return;
     }
-    if (object.material.transparent) {
-      drawObject(object);
-    }
+    drawObject(object);
   });
 
   gl.disable(gl.BLEND);
@@ -338,6 +336,12 @@ Scene.prototype.draw = function () {
       material = object.material;
     if (!vao) {
       return;
+    }
+
+    if (!vao._parts) {
+      if (object.material.transparent !== gl._transparent) {
+        return;
+      }
     }
 
     object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());

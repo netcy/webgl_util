@@ -1,12 +1,8 @@
-var attributesMap = {
-  position: { index: 0, size: 3 },
-  normal: { index: 1, size: 3 },
-  uv: { index: 2, size: 2 },
-  color: { index: 3, size: 4 },
-  tangent: { index: 4, size: 3 },
-  bitangent: { index: 5, size: 3 },
-  barycentric: { index: 6, size: 3 },
-  offset: { index: 7, size: 16 },
+var attributeSizeMap = {
+  35664: 2, // WebGLRenderingContext.FLOAT_VEC2
+  35665: 3, // WebGLRenderingContext.FLOAT_VEC3
+  35666: 4, // WebGLRenderingContext.FLOAT_VEC4
+  35676: 16, // WebGLRenderingContext.FLOAT_MAT4
 };
 
 var Program = wg.Program = function (gl, options) {
@@ -22,7 +18,7 @@ var Program = wg.Program = function (gl, options) {
   function init (vertexShaderSource, fragmentShaderSource) {
     var attributes = self._attributes,
       uniforms = self._uniforms,
-      vertexShader, fragmentShader, program, attribCount, uniformCount, i, attrib, uniform;
+      vertexShader, fragmentShader, program, attribCount, uniformCount, i, attrib, uniform, attribName;
 
     vertexShader = loadShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
     if (!vertexShader) {
@@ -38,9 +34,6 @@ var Program = wg.Program = function (gl, options) {
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
 
-    Object.keys(attributesMap).forEach(function (attribute) {
-      gl.bindAttribLocation(program, attributesMap[attribute].index, 'a_' + attribute);
-    });
     gl.linkProgram(program);
 
     // https://www.khronos.org/webgl/wiki/HandlingContextLost#Handling_Shaders_and_Programs
@@ -57,9 +50,12 @@ var Program = wg.Program = function (gl, options) {
     for (i = 0; i < attribCount; i++) {
       attrib = gl.getActiveAttrib(program, i);
       if (attrib) {
-        attributes[attrib.name] = {
+        attribName = attrib.name.substr(2);
+        attributes[attribName] = {
+          name: attribName,
           location: gl.getAttribLocation(program, attrib.name),
-          type: attrib.type
+          type: attrib.type,
+          size: attributeSizeMap[attrib.type]
         };
       }
     }
@@ -97,6 +93,7 @@ var Program = wg.Program = function (gl, options) {
 Program.prototype.use = function () {
   var self = this;
   self._gl.useProgram(self._program);
+  self._gl._program = self;
 };
 
 Program.prototype.setUniforms = function (values) {

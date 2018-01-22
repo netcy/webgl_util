@@ -15,9 +15,12 @@ function init () {
     var controller = new wg.Object();
     controller.type = 'vive';
     scene.add(controller);
-    // scene.getVertexArray(controller)._parts.forEach(function (part) {
-    //   part.material.wireframe = true;
-    // });
+    scene.getVertexArray(controller)._parts.forEach(function (part) {
+      part.material.wireframe = true;
+      part.material.wireframeOnly = false;
+      part.material.transparent = true;
+      part.material.transparency = 0.7;
+    });
   });
 
   var cube = new wg.Cube().setPosition(0, 0, -3);

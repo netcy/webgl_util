@@ -23,7 +23,7 @@ function init () {
   cube.vao = new wg.VertexArray(scene._gl, {
     buffers: wg.Util.createCube(1)
   });
-  cube.vao.setBufferDatas('offset', offsetAll2, true);
+  cube.vao.setBufferDatas('offset', offsetAll2);
   cube.material.diffuseImage = 'images/crate.gif';
   scene.add(cube);*/
 }

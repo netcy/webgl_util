@@ -90,8 +90,7 @@ function initWebGL(gl) {
         0.0, 0.0, 1.0, 1.0
       ],
       offset: offsetAll1
-    },
-    instancedAttrs: ['offset']
+    }
   });
 
   vao2 = new wg.VertexArray(gl, {
@@ -123,7 +122,7 @@ function initWebGL(gl) {
   offsetAll2.set(offset1, 0);
   offsetAll2.set(offset2, 16);
 
-  vao2.setBufferDatas('offset', offsetAll2, true);
+  vao2.setBufferDatas('offset', offsetAll2);
 
   (function render() {
     gl._aniamtionId = requestAnimationFrame(render);

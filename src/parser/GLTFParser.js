@@ -69,10 +69,13 @@ GLTFParser.parse = function (urlPath, name, callback) {
       });
 
       json.meshes.forEach(function (mesh) {
+        // TODO Handle multi primitives
+        // mesh.name
         mesh.primitives.forEach(function (primitive) {
-          var geometry = {};
+          var geometry = {},
+            targets;
           geometries.push(geometry);
-          if (primitive.mode) {
+          if (primitive.mode != null) {
             geometry.mode = modeMap[primitive.mode];
           }
           Object.keys(primitive.attributes).forEach(function (attributeKey) {
@@ -101,19 +104,40 @@ GLTFParser.parse = function (urlPath, name, callback) {
                 break;
             }
           });
+          if (primitive.targets) {
+            targets = geometry.targets = [];
+            primitive.targets.forEach(function (target) {
+              var geometryTarget = {};
+              targets.push(geometryTarget);
+              if (target.POSITION) {
+                geometryTarget.position = accessors[target.POSITION];
+              }
+              if (target.NORMAL) {
+                geometryTarget.normal = accessors[target.NORMAL];
+              }
+              if (target.TANGENT) {
+                geometryTarget.tangent = accessors[target.TANGENT];
+              }
+            });
+            // TODO how multi primitives match one mesh.weights
+            if (mesh.weights) {
+              geometry.weights = mesh.weights;
+            }
+          }
           /*
-          primitive.material
-          primitive.targets*/
+          primitive.material*/
           if (primitive.indices != null) {
             geometry.index = accessors[primitive.indices];
           }
         });
       });
 
+      // TODO multi scenes
       json.scenes.forEach(function (scene) {
-        scene.nodes.forEach(function (nodeIndex) {
+        // scene.name
+        scene.nodes && scene.nodes.forEach(function (nodeIndex) {
           var node = json.nodes[nodeIndex],
-            matrix;
+            matrix, nodeObject;
           if (node.matrix) {
             matrix = mat4.create();
             mat4.copy(matrix, node.matrix);
@@ -129,6 +153,11 @@ GLTFParser.parse = function (urlPath, name, callback) {
           if (node.camera != null) {
             ;
           } else if (node.mesh != null) {
+            nodeObject = {
+              matrix: matrix,
+              geometry: node.mesh
+            };
+            nodes.push(nodeObject);
             if (node.children) {
               node.children.forEach(function (child) {
                 ;
@@ -137,21 +166,24 @@ GLTFParser.parse = function (urlPath, name, callback) {
             if (node.skin != null) {
               ;
             }
+            // TODO node.weights will override mesh.weights
             if (node.weights) {
-              ;
+              nodeObject.weights = node.weights;
             }
-            nodes.push({
-              matrix: matrix,
-              geometry: node.mesh
-            });
           }
+          // node.children
+          // node.name
         });
+      });
+
+      json.animations && json.animations.forEach(function (animation) {
+        ;
       });
 
       callback({
         geometries: geometries,
         nodes: nodes
-      })
+      });
     }
   });
 

@@ -6,12 +6,56 @@ uniform mat4 u_modelViewProjectMatrix;
   varying vec4 v_color;
 #endif
 
+#ifdef MORPH_TARGETS
+  #if MORPH_TARGETS_COUNT > 0
+    attribute vec3 a_position0;
+  #endif
+  #if MORPH_TARGETS_COUNT > 1
+    attribute vec3 a_position1;
+  #endif
+  #if MORPH_TARGETS_COUNT > 2
+    attribute vec3 a_position2;
+  #endif
+  #if MORPH_TARGETS_COUNT > 3
+    attribute vec3 a_position3;
+  #endif
+  uniform float u_weights[MORPH_TARGETS_COUNT];
+#endif
+
 #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))
   attribute vec3 a_normal;
+  #ifdef MORPH_TARGETS
+    #if MORPH_TARGETS_COUNT > 0
+      attribute vec3 a_normal0;
+    #endif
+    #if MORPH_TARGETS_COUNT > 1
+      attribute vec3 a_normal1;
+    #endif
+    #if MORPH_TARGETS_COUNT > 2
+      attribute vec3 a_normal2;
+    #endif
+    #if MORPH_TARGETS_COUNT > 3
+      attribute vec3 a_normal3;
+    #endif
+  #endif
 #endif
 
 #if defined(LIGHT) && defined(NORMAL_MAP)
   attribute vec3 a_tangent;
+  #ifdef MORPH_TARGETS
+    #if MORPH_TARGETS_COUNT > 0
+      attribute vec3 a_tangent0;
+    #endif
+    #if MORPH_TARGETS_COUNT > 1
+      attribute vec3 a_tangent1;
+    #endif
+    #if MORPH_TARGETS_COUNT > 2
+      attribute vec3 a_tangent2;
+    #endif
+    #if MORPH_TARGETS_COUNT > 3
+      attribute vec3 a_tangent3;
+    #endif
+  #endif
 #endif
 
 #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))
@@ -56,8 +100,24 @@ uniform mat4 u_modelViewProjectMatrix;
 #endif
 
 void main () {
-  vec4 position = vec4(a_position, 1.0);
-  gl_Position = u_modelViewProjectMatrix * position;
+  vec3 position = a_position;
+
+  #ifdef MORPH_TARGETS
+    #if MORPH_TARGETS_COUNT > 0
+      position += a_position0 * u_weights[0];
+    #endif
+    #if MORPH_TARGETS_COUNT > 1
+      position += a_position1 * u_weights[1];
+    #endif
+    #if MORPH_TARGETS_COUNT > 2
+      position += a_position2 * u_weights[2];
+    #endif
+    #if MORPH_TARGETS_COUNT > 3
+      position += a_position3 * u_weights[3];
+    #endif
+  #endif
+
+  vec4 finalPosition = vec4(position, 1.0);
 
   #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)
     #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)
@@ -69,7 +129,7 @@ void main () {
     #endif
 
     #ifdef LIGHT
-      vec3 viewPosition = (u_modelViewMatrix * position).xyz;
+      vec3 viewPosition = (u_modelViewMatrix * finalPosition).xyz;
       v_lightDirection = u_lightPosition - viewPosition;
       v_eyeDirection = -viewPosition;
 
@@ -95,7 +155,7 @@ void main () {
     #endif
 
     #ifdef ENV_MAP
-      v_viewPosition = u_viewMatrix * position;
+      v_viewPosition = u_viewMatrix * finalPosition;
     #endif
 
     #ifdef VERTEX_COLOR
@@ -108,6 +168,8 @@ void main () {
   #endif
 
   #ifdef CLIPPLANE
-    v_position = position;
+    v_position = finalPosition;
   #endif
+
+  gl_Position = u_modelViewProjectMatrix * finalPosition;
 }

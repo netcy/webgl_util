@@ -18,7 +18,7 @@ var Material = wg.Material = function () {
   },
   {
     name: 'diffuseColor',
-    value: [0.5, 0.5, 0.5, 1]
+    value: [1, 1, 1, 1]
   },
   {
     name: 'diffuseImage',
@@ -85,10 +85,10 @@ var Material = wg.Material = function () {
   },
   {
     name: 'wireframeWidth',
-    value: 2.0
+    value: 1.0
   },
   {
-    name: 'vertexColor',
+    name: 'vertexColor', // TODO
     value: false,
     dirty: true
   },
@@ -109,29 +109,11 @@ var Material = wg.Material = function () {
 });
 
 Material.prototype.getKey = function () {
-  /*
-  CLIPPLANE: u_clipPlane, u_modelMatrix
-
-  WIREFRAME: a_barycentric, u_wireframeColor, u_wireframeWidth
-  WIREFRAME_ONLY
-
+  /*WIREFRAME: a_barycentric
   VERTEX_COLOR: a_color
-
-  ENV_MAP: u_viewMatrix, u_modelViewInvMatrix, u_envSampler
-  NORMAL_MAP: u_normalSampler
-
-  LIGHT: u_modelViewMatrix, u_normalViewMatrix, u_lightPosition
-
-  DIFFUSE_MAP: u_diffuseSampler
-  DIFFUSE_CUBE_MAP: u_diffuseSampler
-
   a_tangent: LIGHT && NORMAL_MAP
   a_normal: (DIFFUSE_MAP && DIFFUSE_CUBE_MAP) || (LIGHT || ENV_MAP)
-  a_uv, u_textureScale: (DIFFUSE_MAP && !DIFFUSE_CUBE_MAP) || (LIGHT && NORMAL_MAP)
-  u_normalMatrix: DIFFUSE_MAP && DIFFUSE_CUBE_MAP
-  u_normalViewMatrix: LIGHT || ENV_MAP
-  u_diffuseColor: !DIFFUSE_MAP
-   */
+  a_uv: (DIFFUSE_MAP && !DIFFUSE_CUBE_MAP) || (LIGHT && NORMAL_MAP)*/
   var self = this,
     keys;
   if (self._dirty) {
@@ -149,13 +131,12 @@ Material.prototype.getKey = function () {
     if (!self._wireframe || !self._wireframeOnly) {
       if (self._vertexColor) {
         keys.push('VERTEX_COLOR');
-      } else {
-        if (self._diffuseImage) {
-          if (self._diffuseImage.type === 'CUBE_MAP') {
-            keys.push('DIFFUSE_CUBE_MAP');
-          } else {
-            keys.push('DIFFUSE_MAP');
-          }
+      }
+      if (self._diffuseImage) {
+        if (self._diffuseImage.type === 'CUBE_MAP') {
+          keys.push('DIFFUSE_CUBE_MAP');
+        } else {
+          keys.push('DIFFUSE_MAP');
         }
       }
       if (self._envImage) {

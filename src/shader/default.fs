@@ -10,6 +10,7 @@
     uniform sampler2D u_diffuseSampler;
   #endif
 #endif
+
 uniform vec4 u_diffuseColor;
 
 #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))
@@ -29,10 +30,14 @@ uniform vec4 u_diffuseColor;
 #ifdef LIGHT
   uniform vec3 u_lightColor;
   uniform vec3 u_lightAmbientColor;
+  uniform vec4 u_ambientColor;
+  uniform vec4 u_emissiveColor;
+  uniform float u_shininess;
+  varying vec3 v_lightDirection;
+  varying vec3 v_eyeDirection;
+
   #ifdef AMBIENT_MAP
     uniform sampler2D u_ambientSampler;
-  #else
-    uniform vec4 u_ambientColor;
   #endif
   #ifdef SPECULAR_MAP
     uniform sampler2D u_specularSampler;
@@ -41,15 +46,10 @@ uniform vec4 u_diffuseColor;
   #endif
   #ifdef EMISSIVE_MAP
     uniform sampler2D u_emissiveSampler;
-  #else
-    uniform vec4 u_emissiveColor;
   #endif
   #ifdef NORMAL_MAP
     uniform sampler2D u_normalSampler;
   #endif
-  uniform float u_shininess;
-  varying vec3 v_lightDirection;
-  varying vec3 v_eyeDirection;
 #endif
 
 #ifdef WIREFRAME
@@ -80,7 +80,7 @@ void main () {
   #endif
 
   #if defined(WIREFRAME) && defined(WIREFRAME_ONLY)
-    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()));
+    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()) * u_transparency);
   #else
     #ifdef DIFFUSE_MAP
       #ifdef DIFFUSE_CUBE_MAP
@@ -147,9 +147,11 @@ void main () {
       finalColor *= color.rgb * ambientSamplerColor;
       finalColor += specularColor/* + reflectionColor + refractionColor*/;
       color = vec4(finalColor, u_diffuseColor.a * color.a);
+    #else
+      color = vec4(u_diffuseColor.rgb * color.rgb, u_diffuseColor.a * color.a);
     #endif
     #ifdef WIREFRAME
-      gl_FragColor = mix(vec4(u_wireframeColor, 1.0), color, edgeFactor());
+      gl_FragColor = mix(vec4(u_wireframeColor, u_transparency), color, edgeFactor());
     #else
       gl_FragColor = color;
     #endif
