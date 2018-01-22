@@ -88,7 +88,7 @@ var Material = wg.Material = function () {
     value: 1.0
   },
   {
-    name: 'vertexColor', // TODO
+    name: 'vertexColor',
     value: false,
     dirty: true
   },
@@ -99,6 +99,11 @@ var Material = wg.Material = function () {
   },
   {
     name: 'normalImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'weights',
     value: null,
     dirty: true
   },
@@ -127,6 +132,16 @@ Material.prototype.getKey = function () {
       if (self._wireframeOnly) {
         keys.push('WIREFRAME_ONLY');
       }
+    }
+    if (self._weights) {
+      keys.push('MORPH_TARGETS');
+      keys.push({
+        name: 'MORPH_TARGETS_COUNT',
+        value: self._weights.length,
+        toString: function () {
+          return this.name + ':' + this.value;
+        }
+      });
     }
     if (!self._wireframe || !self._wireframeOnly) {
       if (self._vertexColor) {
@@ -158,7 +173,7 @@ Material.prototype.getKey = function () {
         }
       }
     }
-    self._key = keys.join(':');
+    self._key = keys.join(',');
   }
   return self._key;
 };

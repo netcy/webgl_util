@@ -26,6 +26,10 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
+    if (attrName === 'weights') {
+      self._weights = buffers[attrName];
+      return;
+    }
     var bufferData = buffers[attrName];
     var bufferObject = gl.createBuffer();
     self._bufferMap[attrName] = bufferObject;

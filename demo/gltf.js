@@ -19,11 +19,31 @@ function init () {
 
   // var gui = createGUI(scene);
 
+  var count = 0,
+    flag = 1,
+    ratio;
+  scene.onAnimationFrame = function () {
+    if (window.object && window.object.vao) {
+      if (count > 100) {
+        flag = -1;
+      }
+      if (count < 0) {
+        flag = 1;
+      }
+      count += flag;
+      ratio = count / 100;
+      window.object.vao._weights = [ratio, 1 - ratio];
+      scene.redraw();
+    }
+  };
+
   wg.GLTFParser.parse('gltf/SimpleMorph', 'SimpleMorph', function (data) {
     console.log(data);
-    wg.Util.addGeometry('SimpleMorph', data.geometries[0]);
+    var geometry = data.geometries[0];
+    // geometry.weights = [0, 0];
+    wg.Util.addGeometry('SimpleMorph', geometry);
 
-    var object = new wg.Object();
+    var object = window.object = new wg.Object();
     object.type = 'SimpleMorph';
     object.setPosition(-4, 0, 0);
     scene.add(object);
@@ -33,7 +53,7 @@ function init () {
   //   wg.Util.addGeometry('SimpleSkin', obj);
   // });
 
-  var box = new wg.Cube();
+  /*var box = new wg.Cube();
   // box.type = 'SimpleMorph';
-  scene.add(box);
+  scene.add(box);*/
 }

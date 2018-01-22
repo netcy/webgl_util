@@ -7,7 +7,11 @@ function createProgram (gl, keys) {
     fragmentShader = fragmentShaderPrefix,
     defines = '';
   keys.forEach(function (key) {
-    defines += '#define ' + key + '\n';
+    if (key.name) {
+      defines += '#define ' + key.name + ' ' + key.value + '\n';
+    } else {
+      defines += '#define ' + key + '\n';
+    }
   });
   vertexShader += defines;
   vertexShader += defaultVertexShader;

@@ -68,6 +68,16 @@ var Program = wg.Program = function (gl, options) {
           location: gl.getUniformLocation(program, uniform.name),
           type: uniform.type
         };
+        var indexOfArray = uniform.name.indexOf('['),
+          uniformName = uniform.name.substr(0, indexOfArray);
+        if (indexOfArray > 0) {
+          var location = gl.getUniformLocation(program, uniformName);
+          uniforms[uniformName] = {
+            location: location,
+            type: uniform.type,
+            array: true
+          };
+        }
       }
     }
     return true;
@@ -109,7 +119,7 @@ Program.prototype.setUniform = function (name, value) {
     gl = self._gl,
     uniforms = self._uniforms,
     uniform = uniforms[name],
-    type, location;
+    type, location, isArray;
 
   if (!uniform || value == null) {
     return;
@@ -117,6 +127,7 @@ Program.prototype.setUniform = function (name, value) {
 
   type = uniform.type;
   location = uniform.location;
+  isArray = uniform.array;
 
   switch (type) {
     case gl.INT:
@@ -138,7 +149,11 @@ Program.prototype.setUniform = function (name, value) {
       gl.uniform4iv(location, value);
       break;
     case gl.FLOAT:
-      gl.uniform1f(location, value);
+      if (isArray) {
+        gl.uniform1fv(location, value);
+      } else {
+        gl.uniform1f(location, value);
+      }
       break;
     case gl.FLOAT_VEC2:
       gl.uniform2fv(location, value);

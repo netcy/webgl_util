@@ -119,9 +119,45 @@ void main () {
 
   vec4 finalPosition = vec4(position, 1.0);
 
+  #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))
+    vec3 finalNormal = a_normal;
+    #ifdef MORPH_TARGETS
+      #if MORPH_TARGETS_COUNT > 0
+        finalNormal += a_normal0 * u_weights[0];
+      #endif
+      #if MORPH_TARGETS_COUNT > 1
+        finalNormal += a_normal1 * u_weights[1];
+      #endif
+      #if MORPH_TARGETS_COUNT > 2
+        finalNormal += a_normal2 * u_weights[2];
+      #endif
+      #if MORPH_TARGETS_COUNT > 3
+        finalNormal += a_normal3 * u_weights[3];
+      #endif
+    #endif
+  #endif
+
+  #if defined(LIGHT) && defined(NORMAL_MAP)
+    vec3 finalTangent = a_tangent;
+    #ifdef MORPH_TARGETS
+      #if MORPH_TARGETS_COUNT > 0
+        finalTangent += a_tangent0 * u_weights[0];
+      #endif
+      #if MORPH_TARGETS_COUNT > 1
+        finalTangent += a_tangent1 * u_weights[1];
+      #endif
+      #if MORPH_TARGETS_COUNT > 2
+        finalTangent += a_tangent2 * u_weights[2];
+      #endif
+      #if MORPH_TARGETS_COUNT > 3
+        finalTangent += a_tangent3 * u_weights[3];
+      #endif
+    #endif
+  #endif
+
   #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)
     #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)
-      v_normal = u_normalMatrix * a_normal;
+      v_normal = u_normalMatrix * finalNormal;
     #endif
 
     #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))
@@ -135,8 +171,8 @@ void main () {
 
       #ifdef NORMAL_MAP
         mat3 modelViewMatrix3 = mat3(u_modelViewMatrix);
-        vec3 normal = normalize(modelViewMatrix3 * a_normal);
-        vec3 tangent = normalize(modelViewMatrix3 * a_tangent);
+        vec3 normal = normalize(modelViewMatrix3 * finalNormal);
+        vec3 tangent = normalize(modelViewMatrix3 * finalTangent);
         vec3 bitangent = cross(normal, tangent);
         mat3 tbnMatrix = mat3(
           tangent.x, bitangent.x, normal.x,
@@ -146,11 +182,11 @@ void main () {
         v_lightDirection = tbnMatrix * v_lightDirection;
         v_eyeDirection = tbnMatrix * v_eyeDirection;
       #else
-        v_normalView = u_normalViewMatrix * a_normal;
+        v_normalView = u_normalViewMatrix * finalNormal;
       #endif
     #else
       #if defined(ENV_MAP)
-        v_normalView = u_normalViewMatrix * a_normal;
+        v_normalView = u_normalViewMatrix * finalNormal;
       #endif
     #endif
 

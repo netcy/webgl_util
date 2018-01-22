@@ -384,7 +384,7 @@ Scene.prototype.draw = function () {
       uniforms.u_shininess = material.shininess;
       uniforms.u_transparency = material.transparency;
 
-      // TODO material.vertexColor
+      uniforms.u_weights = vao._weights;
 
       program.use();
       program.setUniforms(uniforms);
@@ -434,18 +434,28 @@ Scene.prototype.clear = function () {
 };
 
 Scene.prototype.getVertexArray = function (object) {
+  if (object.vao) {
+    return object.vao;
+  }
+
   var self = this,
     gl = self._gl,
     type = object.type,
     geometry = wg.geometries[type],
     vao = gl.cache.vaos[type];
-  if (object.vao) {
-    return object.vao;
-  }
-  if (geometry && !vao) {
-    vao = gl.cache.vaos[type] = new VertexArray(gl, {
-      buffers: geometry
-    });
+  if (geometry) {
+    if (!vao) {
+      vao = gl.cache.vaos[type] = new VertexArray(gl, {
+        buffers: geometry
+      });
+    }
+    object.vao = vao;
+    if (vao._color) {
+      object.material.vertexColor = vao._color;
+    }
+    if (vao._weights) {
+      object.material.weights = vao._weights;
+    }
   }
   return vao;
 };

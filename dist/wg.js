@@ -285,6 +285,14 @@ var addGeometry = Util.addGeometry = function (name, geometry) {
   if (geometry.tangent) {
     geometry = calculateBarycentric(geometry);
   }
+  if (geometry.targets) {
+    geometry.targets.forEach(function (target) {
+      if (!target.normal) {
+        target.normal = calculateNormals(target.position, geometry.index);
+      }
+      // TODO tangent, barycentric
+    });
+  }
   wg.geometries[name] = geometry;
 };
 
@@ -508,6 +516,7 @@ function calculateNormals (vs, ind) {
     ns[i + z] = 0.0;
   }
 
+  // TODO ind is null
   for (var i = 0; i < ind.length; i = i + 3) { //we work on triads of vertices to calculate normals so i = i+3 (i = indices index)
     var v1 = [];
     var v2 = [];
@@ -749,6 +758,16 @@ var Program = wg.Program = function (gl, options) {
           location: gl.getUniformLocation(program, uniform.name),
           type: uniform.type
         };
+        var indexOfArray = uniform.name.indexOf('['),
+          uniformName = uniform.name.substr(0, indexOfArray);
+        if (indexOfArray > 0) {
+          var location = gl.getUniformLocation(program, uniformName);
+          uniforms[uniformName] = {
+            location: location,
+            type: uniform.type,
+            array: true
+          };
+        }
       }
     }
     return true;
@@ -790,7 +809,7 @@ Program.prototype.setUniform = function (name, value) {
     gl = self._gl,
     uniforms = self._uniforms,
     uniform = uniforms[name],
-    type, location;
+    type, location, isArray;
 
   if (!uniform || value == null) {
     return;
@@ -798,6 +817,7 @@ Program.prototype.setUniform = function (name, value) {
 
   type = uniform.type;
   location = uniform.location;
+  isArray = uniform.array;
 
   switch (type) {
     case gl.INT:
@@ -819,7 +839,11 @@ Program.prototype.setUniform = function (name, value) {
       gl.uniform4iv(location, value);
       break;
     case gl.FLOAT:
-      gl.uniform1f(location, value);
+      if (isArray) {
+        gl.uniform1fv(location, value);
+      } else {
+        gl.uniform1f(location, value);
+      }
       break;
     case gl.FLOAT_VEC2:
       gl.uniform2fv(location, value);
@@ -1262,6 +1286,10 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
+    if (attrName === 'weights') {
+      self._weights = buffers[attrName];
+      return;
+    }
     var bufferData = buffers[attrName];
     var bufferObject = gl.createBuffer();
     self._bufferMap[attrName] = bufferObject;
@@ -1447,7 +1475,7 @@ VertexArray.prototype.dispose = function () {
 };
 
 // Source: src/shader/Shader.js
-var defaultVertexShader = 'attribute vec3 a_position;\nuniform mat4 u_modelViewProjectMatrix;\n\n#ifdef VERTEX_COLOR\n  attribute vec4 a_color;\n  varying vec4 v_color;\n#endif\n\n#ifdef MORPH_TARGETS\n  #if MORPH_TARGETS_COUNT > 0\n    attribute vec3 a_position0;\n  #endif\n  #if MORPH_TARGETS_COUNT > 1\n    attribute vec3 a_position1;\n  #endif\n  #if MORPH_TARGETS_COUNT > 2\n    attribute vec3 a_position2;\n  #endif\n  #if MORPH_TARGETS_COUNT > 3\n    attribute vec3 a_position3;\n  #endif\n  uniform float u_weights[MORPH_TARGETS_COUNT];\n#endif\n\n#if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n  attribute vec3 a_normal;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_normal0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_normal1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_normal2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_normal3;\n    #endif\n  #endif\n#endif\n\n#if defined(LIGHT) && defined(NORMAL_MAP)\n  attribute vec3 a_tangent;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_tangent0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_tangent1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_tangent2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_tangent3;\n    #endif\n  #endif\n#endif\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  attribute vec2 a_uv;\n  uniform vec2 u_textureScale;\n  varying vec2 v_uv;\n#endif\n\n#if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n  uniform mat3 u_normalMatrix;\n  varying vec3 v_normal;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat4 u_viewMatrix;\n  varying vec4 v_viewPosition;\n#endif\n\n#if defined(LIGHT) || defined(ENV_MAP)\n  uniform mat3 u_normalViewMatrix;\n#endif\n\n#ifdef LIGHT\n  uniform mat4 u_modelViewMatrix;\n  uniform vec3 u_lightPosition;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n#endif\n\n#ifdef WIREFRAME\n  attribute vec3 a_barycentric;\n  varying vec3 v_barycentric;\n#endif\n\n#ifdef CLIPPLANE\n  uniform mat4 u_modelMatrix;\n  varying vec4 v_position;\n#endif\n\nvoid main () {\n  vec3 position = a_position;\n\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      position += a_position0 * u_weights[0];\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      position += a_position1 * u_weights[1];\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      position += a_position2 * u_weights[2];\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      position += a_position3 * u_weights[3];\n    #endif\n  #endif\n\n  vec4 finalPosition = vec4(position, 1.0);\n\n  #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)\n    #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n      v_normal = u_normalMatrix * a_normal;\n    #endif\n\n    #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n      v_uv = a_uv * u_textureScale;\n    #endif\n\n    #ifdef LIGHT\n      vec3 viewPosition = (u_modelViewMatrix * finalPosition).xyz;\n      v_lightDirection = u_lightPosition - viewPosition;\n      v_eyeDirection = -viewPosition;\n\n      #ifdef NORMAL_MAP\n        mat3 modelViewMatrix3 = mat3(u_modelViewMatrix);\n        vec3 normal = normalize(modelViewMatrix3 * a_normal);\n        vec3 tangent = normalize(modelViewMatrix3 * a_tangent);\n        vec3 bitangent = cross(normal, tangent);\n        mat3 tbnMatrix = mat3(\n          tangent.x, bitangent.x, normal.x,\n          tangent.y, bitangent.y, normal.y,\n          tangent.z, bitangent.z, normal.z\n        );\n        v_lightDirection = tbnMatrix * v_lightDirection;\n        v_eyeDirection = tbnMatrix * v_eyeDirection;\n      #else\n        v_normalView = u_normalViewMatrix * a_normal;\n      #endif\n    #else\n      #if defined(ENV_MAP)\n        v_normalView = u_normalViewMatrix * a_normal;\n      #endif\n    #endif\n\n    #ifdef ENV_MAP\n      v_viewPosition = u_viewMatrix * finalPosition;\n    #endif\n\n    #ifdef VERTEX_COLOR\n      v_color = a_color;\n    #endif\n  #endif\n\n  #ifdef WIREFRAME\n    v_barycentric = a_barycentric;\n  #endif\n\n  #ifdef CLIPPLANE\n    v_position = finalPosition;\n  #endif\n\n  gl_Position = u_modelViewProjectMatrix * finalPosition;\n}\n';
+var defaultVertexShader = 'attribute vec3 a_position;\nuniform mat4 u_modelViewProjectMatrix;\n\n#ifdef VERTEX_COLOR\n  attribute vec4 a_color;\n  varying vec4 v_color;\n#endif\n\n#ifdef MORPH_TARGETS\n  #if MORPH_TARGETS_COUNT > 0\n    attribute vec3 a_position0;\n  #endif\n  #if MORPH_TARGETS_COUNT > 1\n    attribute vec3 a_position1;\n  #endif\n  #if MORPH_TARGETS_COUNT > 2\n    attribute vec3 a_position2;\n  #endif\n  #if MORPH_TARGETS_COUNT > 3\n    attribute vec3 a_position3;\n  #endif\n  uniform float u_weights[MORPH_TARGETS_COUNT];\n#endif\n\n#if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n  attribute vec3 a_normal;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_normal0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_normal1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_normal2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_normal3;\n    #endif\n  #endif\n#endif\n\n#if defined(LIGHT) && defined(NORMAL_MAP)\n  attribute vec3 a_tangent;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_tangent0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_tangent1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_tangent2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_tangent3;\n    #endif\n  #endif\n#endif\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  attribute vec2 a_uv;\n  uniform vec2 u_textureScale;\n  varying vec2 v_uv;\n#endif\n\n#if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n  uniform mat3 u_normalMatrix;\n  varying vec3 v_normal;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat4 u_viewMatrix;\n  varying vec4 v_viewPosition;\n#endif\n\n#if defined(LIGHT) || defined(ENV_MAP)\n  uniform mat3 u_normalViewMatrix;\n#endif\n\n#ifdef LIGHT\n  uniform mat4 u_modelViewMatrix;\n  uniform vec3 u_lightPosition;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n#endif\n\n#ifdef WIREFRAME\n  attribute vec3 a_barycentric;\n  varying vec3 v_barycentric;\n#endif\n\n#ifdef CLIPPLANE\n  uniform mat4 u_modelMatrix;\n  varying vec4 v_position;\n#endif\n\nvoid main () {\n  vec3 position = a_position;\n\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      position += a_position0 * u_weights[0];\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      position += a_position1 * u_weights[1];\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      position += a_position2 * u_weights[2];\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      position += a_position3 * u_weights[3];\n    #endif\n  #endif\n\n  vec4 finalPosition = vec4(position, 1.0);\n\n  #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n    vec3 finalNormal = a_normal;\n    #ifdef MORPH_TARGETS\n      #if MORPH_TARGETS_COUNT > 0\n        finalNormal += a_normal0 * u_weights[0];\n      #endif\n      #if MORPH_TARGETS_COUNT > 1\n        finalNormal += a_normal1 * u_weights[1];\n      #endif\n      #if MORPH_TARGETS_COUNT > 2\n        finalNormal += a_normal2 * u_weights[2];\n      #endif\n      #if MORPH_TARGETS_COUNT > 3\n        finalNormal += a_normal3 * u_weights[3];\n      #endif\n    #endif\n  #endif\n\n  #if defined(LIGHT) && defined(NORMAL_MAP)\n    vec3 finalTangent = a_tangent;\n    #ifdef MORPH_TARGETS\n      #if MORPH_TARGETS_COUNT > 0\n        finalTangent += a_tangent0 * u_weights[0];\n      #endif\n      #if MORPH_TARGETS_COUNT > 1\n        finalTangent += a_tangent1 * u_weights[1];\n      #endif\n      #if MORPH_TARGETS_COUNT > 2\n        finalTangent += a_tangent2 * u_weights[2];\n      #endif\n      #if MORPH_TARGETS_COUNT > 3\n        finalTangent += a_tangent3 * u_weights[3];\n      #endif\n    #endif\n  #endif\n\n  #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)\n    #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n      v_normal = u_normalMatrix * finalNormal;\n    #endif\n\n    #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n      v_uv = a_uv * u_textureScale;\n    #endif\n\n    #ifdef LIGHT\n      vec3 viewPosition = (u_modelViewMatrix * finalPosition).xyz;\n      v_lightDirection = u_lightPosition - viewPosition;\n      v_eyeDirection = -viewPosition;\n\n      #ifdef NORMAL_MAP\n        mat3 modelViewMatrix3 = mat3(u_modelViewMatrix);\n        vec3 normal = normalize(modelViewMatrix3 * finalNormal);\n        vec3 tangent = normalize(modelViewMatrix3 * finalTangent);\n        vec3 bitangent = cross(normal, tangent);\n        mat3 tbnMatrix = mat3(\n          tangent.x, bitangent.x, normal.x,\n          tangent.y, bitangent.y, normal.y,\n          tangent.z, bitangent.z, normal.z\n        );\n        v_lightDirection = tbnMatrix * v_lightDirection;\n        v_eyeDirection = tbnMatrix * v_eyeDirection;\n      #else\n        v_normalView = u_normalViewMatrix * finalNormal;\n      #endif\n    #else\n      #if defined(ENV_MAP)\n        v_normalView = u_normalViewMatrix * finalNormal;\n      #endif\n    #endif\n\n    #ifdef ENV_MAP\n      v_viewPosition = u_viewMatrix * finalPosition;\n    #endif\n\n    #ifdef VERTEX_COLOR\n      v_color = a_color;\n    #endif\n  #endif\n\n  #ifdef WIREFRAME\n    v_barycentric = a_barycentric;\n  #endif\n\n  #ifdef CLIPPLANE\n    v_position = finalPosition;\n  #endif\n\n  gl_Position = u_modelViewProjectMatrix * finalPosition;\n}\n';
 var defaultFragmentShader = '#ifdef VERTEX_COLOR\n  varying vec4 v_color;\n#endif\n\n#ifdef DIFFUSE_MAP\n  #ifdef DIFFUSE_CUBE_MAP\n    uniform samplerCube u_diffuseSampler;\n    varying vec3 v_normal;\n  #else\n    uniform sampler2D u_diffuseSampler;\n  #endif\n#endif\n\nuniform vec4 u_diffuseColor;\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  varying vec2 v_uv;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat3 u_modelViewInvMatrix;\n  uniform samplerCube u_envSampler;\n  varying vec4 v_viewPosition;\n#endif\n\n#ifdef LIGHT\n  uniform vec3 u_lightColor;\n  uniform vec3 u_lightAmbientColor;\n  uniform vec4 u_ambientColor;\n  uniform vec4 u_emissiveColor;\n  uniform float u_shininess;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n\n  #ifdef AMBIENT_MAP\n    uniform sampler2D u_ambientSampler;\n  #endif\n  #ifdef SPECULAR_MAP\n    uniform sampler2D u_specularSampler;\n  #else\n    uniform vec4 u_specularColor;\n  #endif\n  #ifdef EMISSIVE_MAP\n    uniform sampler2D u_emissiveSampler;\n  #endif\n  #ifdef NORMAL_MAP\n    uniform sampler2D u_normalSampler;\n  #endif\n#endif\n\n#ifdef WIREFRAME\n  uniform vec3 u_wireframeColor;\n  uniform float u_wireframeWidth;\n  varying vec3 v_barycentric;\n\n  float edgeFactor () {\n    vec3 d = fwidth(v_barycentric);\n    vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, v_barycentric);\n    return min(min(a3.x, a3.y), a3.z);\n  }\n#endif\n\n#ifdef CLIPPLANE\n  uniform vec4 u_clipPlane;\n  varying vec4 v_position;\n#endif\n\nuniform float u_transparency;\n\nvoid main () {\n  #ifdef CLIPPLANE\n    float clipDistance = dot(v_position.xyz, u_clipPlane.xyz);\n    if (clipDistance >= u_clipPlane.w) {\n      discard;\n    }\n  #endif\n\n  #if defined(WIREFRAME) && defined(WIREFRAME_ONLY)\n    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()) * u_transparency);\n  #else\n    #ifdef DIFFUSE_MAP\n      #ifdef DIFFUSE_CUBE_MAP\n        vec4 color = textureCube(u_diffuseSampler, v_normal);\n      #else\n        vec4 color = texture2D(u_diffuseSampler, v_uv);\n      #endif\n    #else\n      vec4 color = vec4(1.0);\n    #endif\n\n    #ifdef VERTEX_COLOR\n      color *= v_color;\n    #endif\n\n    #ifdef ENV_MAP\n      vec3 N = v_normalView;\n      vec3 V = v_viewPosition.xyz;\n      vec3 R = reflect(V, N);\n      R = u_modelViewInvMatrix * R;\n      color = textureCube(u_envSampler, R) * color;\n    #endif\n\n    color.a *= u_transparency;\n\n    #ifdef LIGHT\n      #ifdef NORMAL_MAP\n        vec3 normal = normalize((texture2D(u_normalSampler, v_uv) * 2.0 - 1.0).rgb);\n      #else\n        vec3 normal = normalize(v_normalView);\n      #endif\n\n      vec3 lightDirection = normalize(v_lightDirection);\n      vec3 eyeDirection = normalize(v_eyeDirection);\n      float diffuse = max(dot(lightDirection, normal), 0.0);\n\n      vec3 reflectDirection = reflect(-lightDirection, normal);\n      float specular = 0.0;\n      if (u_shininess > 0.0) {\n        specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), u_shininess);\n      }\n\n      #ifdef AMBIENT_MAP\n        vec3 ambientSamplerColor = texture2D(u_ambientSampler, v_uv).rgb;\n      #else\n        vec3 ambientSamplerColor = vec3(1.0);\n      #endif\n\n      #ifdef SPECULAR_MAP\n        vec4 specularMaterialColor = texture2D(u_specularSampler, v_uv);\n      #else\n        vec4 specularMaterialColor = u_specularColor;\n      #endif\n\n      vec4 emissiveColor = u_emissiveColor;\n      #ifdef EMISSIVE_MAP\n        emissiveColor += texture2D(u_emissiveSampler, v_uv);\n      #endif\n\n      vec3 ambientColor = u_lightAmbientColor * u_ambientColor.rgb;\n      vec3 diffuseColor = u_lightColor * u_diffuseColor.rgb * diffuse;\n      vec3 specularColor = u_lightColor * specularMaterialColor.rgb * specular;\n      vec3 finalColor = clamp(ambientColor + diffuseColor + emissiveColor.rgb, 0.0, 1.0);\n      finalColor *= color.rgb * ambientSamplerColor;\n      finalColor += specularColor/* + reflectionColor + refractionColor*/;\n      color = vec4(finalColor, u_diffuseColor.a * color.a);\n    #else\n      color = vec4(u_diffuseColor.rgb * color.rgb, u_diffuseColor.a * color.a);\n    #endif\n    #ifdef WIREFRAME\n      gl_FragColor = mix(vec4(u_wireframeColor, u_transparency), color, edgeFactor());\n    #else\n      gl_FragColor = color;\n    #endif\n  #endif\n}\n';
 
 // Source: src/shader/ShaderUtil.js
@@ -1460,7 +1488,11 @@ function createProgram (gl, keys) {
     fragmentShader = fragmentShaderPrefix,
     defines = '';
   keys.forEach(function (key) {
-    defines += '#define ' + key + '\n';
+    if (key.name) {
+      defines += '#define ' + key.name + ' ' + key.value + '\n';
+    } else {
+      defines += '#define ' + key + '\n';
+    }
   });
   vertexShader += defines;
   vertexShader += defaultVertexShader;
@@ -2121,7 +2153,7 @@ Scene.prototype.draw = function () {
       uniforms.u_shininess = material.shininess;
       uniforms.u_transparency = material.transparency;
 
-      // TODO material.vertexColor
+      uniforms.u_weights = vao._weights;
 
       program.use();
       program.setUniforms(uniforms);
@@ -2171,18 +2203,28 @@ Scene.prototype.clear = function () {
 };
 
 Scene.prototype.getVertexArray = function (object) {
+  if (object.vao) {
+    return object.vao;
+  }
+
   var self = this,
     gl = self._gl,
     type = object.type,
     geometry = wg.geometries[type],
     vao = gl.cache.vaos[type];
-  if (object.vao) {
-    return object.vao;
-  }
-  if (geometry && !vao) {
-    vao = gl.cache.vaos[type] = new VertexArray(gl, {
-      buffers: geometry
-    });
+  if (geometry) {
+    if (!vao) {
+      vao = gl.cache.vaos[type] = new VertexArray(gl, {
+        buffers: geometry
+      });
+    }
+    object.vao = vao;
+    if (vao._color) {
+      object.material.vertexColor = vao._color;
+    }
+    if (vao._weights) {
+      object.material.weights = vao._weights;
+    }
   }
   return vao;
 };
@@ -4426,7 +4468,7 @@ var Material = wg.Material = function () {
     value: 1.0
   },
   {
-    name: 'vertexColor', // TODO
+    name: 'vertexColor',
     value: false,
     dirty: true
   },
@@ -4437,6 +4479,11 @@ var Material = wg.Material = function () {
   },
   {
     name: 'normalImage',
+    value: null,
+    dirty: true
+  },
+  {
+    name: 'weights',
     value: null,
     dirty: true
   },
@@ -4465,6 +4512,16 @@ Material.prototype.getKey = function () {
       if (self._wireframeOnly) {
         keys.push('WIREFRAME_ONLY');
       }
+    }
+    if (self._weights) {
+      keys.push('MORPH_TARGETS');
+      keys.push({
+        name: 'MORPH_TARGETS_COUNT',
+        value: self._weights.length,
+        toString: function () {
+          return this.name + ':' + this.value;
+        }
+      });
     }
     if (!self._wireframe || !self._wireframeOnly) {
       if (self._vertexColor) {
@@ -4496,7 +4553,7 @@ Material.prototype.getKey = function () {
         }
       }
     }
-    self._key = keys.join(':');
+    self._key = keys.join(',');
   }
   return self._key;
 };

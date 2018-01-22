@@ -9,6 +9,14 @@ var addGeometry = Util.addGeometry = function (name, geometry) {
   if (geometry.tangent) {
     geometry = calculateBarycentric(geometry);
   }
+  if (geometry.targets) {
+    geometry.targets.forEach(function (target) {
+      if (!target.normal) {
+        target.normal = calculateNormals(target.position, geometry.index);
+      }
+      // TODO tangent, barycentric
+    });
+  }
   wg.geometries[name] = geometry;
 };
 
@@ -232,6 +240,7 @@ function calculateNormals (vs, ind) {
     ns[i + z] = 0.0;
   }
 
+  // TODO ind is null
   for (var i = 0; i < ind.length; i = i + 3) { //we work on triads of vertices to calculate normals so i = i+3 (i = indices index)
     var v1 = [];
     var v2 = [];
