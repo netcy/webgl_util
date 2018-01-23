@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.24.0] - 2018-01-23
+### Added
+- GLTFParser: animations
+
+
 ## [0.23.0] - 2018-01-22
 ### Added
 - Morph targets

@@ -202,7 +202,7 @@ var Scene = wg.Scene = function (canvas, options) {
         self.draw();
         vrDisplay.submitFrame();
       } else {
-        if (self.onAnimationFrame() !== false) {
+        if (self.onAnimationFrame(time) !== false) {
           if (time !== 0 && self._dirty) {
             gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
             self._setViewport(0, 0, canvas.width, canvas.height);
@@ -261,7 +261,7 @@ var Scene = wg.Scene = function (canvas, options) {
 Scene.prototype.onGamepadChanged = function (leftGamepad, rightGamepad, pressedGamepad, buttonIndex) {
 };
 
-Scene.prototype.onAnimationFrame = function () {
+Scene.prototype.onAnimationFrame = function (time) {
 };
 
 Scene.prototype.redraw = function () {

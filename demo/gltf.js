@@ -22,7 +22,7 @@ function init () {
   var count = 0,
     flag = 1,
     ratio;
-  scene.onAnimationFrame = function () {
+  /*scene.onAnimationFrame = function () {
     if (window.object && window.object.vao) {
       if (count > 100) {
         flag = -1;
@@ -35,7 +35,7 @@ function init () {
       window.object.vao._weights = [ratio, 1 - ratio];
       scene.redraw();
     }
-  };
+  };*/
 
   wg.GLTFParser.parse('gltf/SimpleMorph', 'SimpleMorph', function (data) {
     console.log(data);

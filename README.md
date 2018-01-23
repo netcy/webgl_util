@@ -4,6 +4,7 @@ High level WebGL API encapsulation.
 ## Feature
 
 ### Core
+
 #### Program
 #### Texture
 #### VertexArray
@@ -13,10 +14,12 @@ High level WebGL API encapsulation.
 #### Material
 
 ### Parser
+
 #### GLTFParser
 #### ObjParser
 
 ### Effect
+
 #### FxaaEffect
 #### GlowEffect
 #### OutlineEffect
@@ -28,14 +31,14 @@ High level WebGL API encapsulation.
 ## TODO List
 
 ### Light
+
 #### DirectionLight
 #### PointLight
 #### SpotLight
 
 ### GLTF
-#### Morph Target
+
 #### Skin
-#### Animation
 #### PBRMaterial
 
 ### Fog
@@ -52,6 +55,7 @@ High level WebGL API encapsulation.
 ### Terrain
 
 ### WebGL2
+
 #### Instance
 #### UniformBuffer
 

@@ -23,6 +23,12 @@ var GLTFParser = wg.GLTFParser = {},
     MAT3: 9,
     MAT4: 16,
   },
+  targetPathSizeMap = {
+    translation: 3,
+    rotation: 4,
+    scale: 3,
+    // weights
+  },
   defaultTranslation = vec3.create(),
   defaultScale = vec3.fromValues(1, 1, 1),
   defaultRotation = quat.create();
@@ -36,7 +42,8 @@ GLTFParser.parse = function (urlPath, name, callback) {
       bufferCount = json.buffers.length,
       accessors = [],
       geometries = [],
-      nodes = [];
+      nodes = [],
+      nodeMap = {};
 
     json.buffers.forEach(function (buffer, index) {
       if (buffer.uri.indexOf('data:') === 0) {
@@ -63,9 +70,17 @@ GLTFParser.parse = function (urlPath, name, callback) {
           // bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
           buffer = buffers[bufferView.buffer],
           offset = accessor.byteOffset + bufferView.byteOffset,
-          count = accessor.count * typeMap[accessor.type];
+          typeSize = typeMap[accessor.type],
+          count = accessor.count;
+          length = count * typeSize;
         // accessor.max, accessor.min
-        accessors.push(new arrayType(buffer, offset, count));
+        accessors.push({
+          buffer: new arrayType(buffer, offset, length),
+          offset: offset,
+          count: count,
+          typeSize: typeSize,
+          length: length
+        });
       });
 
       json.meshes.forEach(function (mesh) {
@@ -79,24 +94,24 @@ GLTFParser.parse = function (urlPath, name, callback) {
             geometry.mode = modeMap[primitive.mode];
           }
           Object.keys(primitive.attributes).forEach(function (attributeKey) {
-            var accessor = accessors[primitive.attributes[attributeKey]];
+            var buffer = accessors[primitive.attributes[attributeKey]].buffer;
             switch (attributeKey) {
               case 'POSITION':
-                geometry.position = accessor;
+                geometry.position = buffer;
                 break;
               case 'NORMAL':
-                geometry.normal = accessor;
+                geometry.normal = buffer;
                 break;
               case 'TANGENT':
-                geometry.tangent = accessor;
+                geometry.tangent = buffer;
                 break;
               case 'TEXCOORD_0':
-                geometry.uv = accessor;
+                geometry.uv = buffer;
                 break;
               case 'TEXCOORD_1':
                 break;
               case 'COLOR_0':
-                geometry.color = accessor;
+                geometry.color = buffer;
                 break;
               case 'JOINTS_0':
                 break;
@@ -110,13 +125,13 @@ GLTFParser.parse = function (urlPath, name, callback) {
               var geometryTarget = {};
               targets.push(geometryTarget);
               if (target.POSITION) {
-                geometryTarget.position = accessors[target.POSITION];
+                geometryTarget.position = accessors[target.POSITION].buffer;
               }
               if (target.NORMAL) {
-                geometryTarget.normal = accessors[target.NORMAL];
+                geometryTarget.normal = accessors[target.NORMAL].buffer;
               }
               if (target.TANGENT) {
-                geometryTarget.tangent = accessors[target.TANGENT];
+                geometryTarget.tangent = accessors[target.TANGENT].buffer;
               }
             });
             // TODO how multi primitives match one mesh.weights
@@ -127,7 +142,7 @@ GLTFParser.parse = function (urlPath, name, callback) {
           /*
           primitive.material*/
           if (primitive.indices != null) {
-            geometry.index = accessors[primitive.indices];
+            geometry.index = accessors[primitive.indices].buffer;
           }
         });
       });
@@ -154,10 +169,15 @@ GLTFParser.parse = function (urlPath, name, callback) {
             ;
           } else if (node.mesh != null) {
             nodeObject = {
+              name: node.name,
               matrix: matrix,
-              geometry: node.mesh
+              geometry: node.mesh,
+              rotation: node.rotation || defaultRotation,
+              translation: node.translation || defaultTranslation,
+              scale: node.scale || defaultScale
             };
             nodes.push(nodeObject);
+            nodeMap[nodeIndex] = nodeObject;
             if (node.children) {
               node.children.forEach(function (child) {
                 ;
@@ -171,13 +191,41 @@ GLTFParser.parse = function (urlPath, name, callback) {
               nodeObject.weights = node.weights;
             }
           }
-          // node.children
-          // node.name
         });
       });
 
+      // TODO mutil animations
       json.animations && json.animations.forEach(function (animation) {
-        ;
+        // animation.name
+        var samplerObjects = [];
+        animation.samplers.forEach(function (sampler) {
+          samplerObjects.push({
+            input: accessors[sampler.input].buffer,
+            interpolation: sampler.interpolation, // 'LINEAR', 'STEP', 'CUBICSPLINE'
+            output: accessors[sampler.output],
+          });
+        });
+        animation.channels.forEach(function (channel) {
+          var node = nodeMap[channel.target.node];
+          var path = channel.target.path;
+          var animations = node.animations || (node.animations = []);
+
+          var samplerObject = samplerObjects[channel.sampler];
+          var accessorObject = samplerObject.output;
+          var buffer = accessorObject.buffer.buffer;
+          var typeSize = accessorObject.typeSize;
+          var output = [];
+          for (var i=0; i<accessorObject.count; i++) {
+            var offset = accessorObject.offset + i * typeSize * targetPathSizeMap[path];
+            output.push(new Float32Array(buffer, offset, typeSize));
+          }
+          samplerObject.output = output;
+
+          animations.push({
+            sampler: samplerObject,
+            path: path // 'translation', 'rotation', 'scale', 'weights'
+          });
+        });
       });
 
       callback({
