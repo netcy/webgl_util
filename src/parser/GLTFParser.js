@@ -28,10 +28,7 @@ var GLTFParser = wg.GLTFParser = {},
     rotation: 4,
     scale: 3,
     // weights
-  },
-  defaultTranslation = vec3.create(),
-  defaultScale = vec3.fromValues(1, 1, 1),
-  defaultRotation = quat.create();
+  };
 
 GLTFParser.parse = function (urlPath, name, callback) {
   urlPath = urlPath + (urlPath.endsWith('/') ? '' : '/');
@@ -171,10 +168,10 @@ GLTFParser.parse = function (urlPath, name, callback) {
             nodeObject = {
               name: node.name,
               matrix: matrix,
-              geometry: node.mesh,
-              rotation: node.rotation || defaultRotation,
-              translation: node.translation || defaultTranslation,
-              scale: node.scale || defaultScale
+              geometry: node.mesh, // TODO
+              rotation: node.rotation,
+              translation: node.translation,
+              scale: node.scale
             };
             nodes.push(nodeObject);
             nodeMap[nodeIndex] = nodeObject;
@@ -207,19 +204,39 @@ GLTFParser.parse = function (urlPath, name, callback) {
         });
         animation.channels.forEach(function (channel) {
           var node = nodeMap[channel.target.node];
+          var geometry = geometries[node.geometry];
           var path = channel.target.path;
           var animations = node.animations || (node.animations = []);
 
           var samplerObject = samplerObjects[channel.sampler];
           var accessorObject = samplerObject.output;
           var buffer = accessorObject.buffer.buffer;
-          var typeSize = accessorObject.typeSize;
           var output = [];
-          for (var i=0; i<accessorObject.count; i++) {
-            var offset = accessorObject.offset + i * typeSize * targetPathSizeMap[path];
-            output.push(new Float32Array(buffer, offset, typeSize));
+          if (path === 'weights') {
+            var targetCount = geometry.targets.length;
+            var count = accessorObject.count / targetCount;
+            for (var i = 0; i < count; i++) {
+              var offset = accessorObject.offset + i * 4 * targetCount;
+              output.push(new Float32Array(buffer, offset, targetCount));
+            }
+            samplerObject.splitOutput = output;
+          } else {
+            var size = targetPathSizeMap[path];
+            for (var i = 0; i < accessorObject.count; i++) {
+              var offset = accessorObject.offset + i * 4 * size;
+              output.push(new Float32Array(buffer, offset, size));
+            }
+            samplerObject.output = output;
+            if (path === 'translation' && !node.translation) {
+              node.translation = vec3.create();
+            }
+            if (path === 'rotation' && !node.rotation) {
+              node.rotation = quat.create();
+            }
+            if (path === 'scale' && !node.scale) {
+              node.scale = vec3.create();
+            }
           }
-          samplerObject.output = output;
 
           animations.push({
             sampler: samplerObject,
@@ -237,13 +254,12 @@ GLTFParser.parse = function (urlPath, name, callback) {
 
   function dataURIToBufferArray (data) {
     var indexOfcomma = data.indexOf(','),
-      i = 0,
-      n, result;
+      i, n, result;
     data = data.substr(indexOfcomma + 1);
     data = atob(data);
     n = data.length;
     result = new Uint8Array(n);
-    for (; i<n; i++) {
+    for (i = 0; i < n; i++) {
       result[i] = data.charCodeAt(i);
     }
     return result.buffer;

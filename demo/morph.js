@@ -19,19 +19,21 @@ function init () {
 
   // var gui = createGUI(scene);
 
-  wg.GLTFParser.parse('gltf/SimpleAnimation', 'SimpleAnimation', function (data) {
+  wg.GLTFParser.parse('gltf/SimpleMorph', 'SimpleMorph', function (data) {
     console.log(data);
     var geometry = data.geometries[0];
-    wg.Util.addGeometry('SimpleAnimation', geometry);
+    wg.Util.addGeometry('SimpleMorph', geometry);
 
     data.nodes.forEach(function (node) {
       var object = new wg.Object();
-      object.type = 'SimpleAnimation';
+      object.type = 'SimpleMorph';
       object.animations = node.animations;
       object._node = node;
       if (node.matrix) {
         object._modelMatrix = node.matrix;
       }
+      object.material.diffuseColor = [0.5, 0.5, 0.5, 1];
+      object.material.light = false;
       scene.add(object);
     });
   });

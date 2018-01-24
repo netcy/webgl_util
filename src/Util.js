@@ -3,6 +3,10 @@ var Util = wg.Util = {
   version: '0.24.0'
 };
 
+var defaultTranslation = wg.defaultTranslation = vec3.create(),
+  defaultScale = wg.defaultScale = vec3.fromValues(1, 1, 1),
+  defaultRotation = wg.defaultRotation = quat.create();
+
 var getClientPoint = Util.getClientPoint = function (e) {
   return {
     x: (e.touches ? e.touches[0] : e).clientX,
@@ -164,4 +168,10 @@ var defineProperty = Util.defineProperty = function (object, property, defaultVa
       }
     }
   });
+};
+
+var cloneArrayBuffer = Util.cloneArrayBuffer = function (buffer) {
+  var result = new buffer.constructor(buffer.length);
+  result.set(buffer);
+  return result;
 };

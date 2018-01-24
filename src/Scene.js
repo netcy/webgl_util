@@ -191,7 +191,7 @@ var Scene = wg.Scene = function (canvas, options) {
         mat4.copy(camera._projectMatix, frameData.leftProjectionMatrix);
         self._setViewport(0, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        self.draw();
+        self.draw(time);
 
         mat4.copy(camera._viewMatrix, frameData.rightViewMatrix);
         mat4.multiply(camera._viewMatrix, camera._viewMatrix, tranMat);
@@ -199,7 +199,7 @@ var Scene = wg.Scene = function (canvas, options) {
         self._setViewport(canvas.width * 0.5, 0, canvas.width * 0.5, canvas.height);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
         self._dirty = true;
-        self.draw();
+        self.draw(time);
         vrDisplay.submitFrame();
       } else {
         if (self.onAnimationFrame(time) !== false) {
@@ -207,7 +207,7 @@ var Scene = wg.Scene = function (canvas, options) {
             gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
             self._setViewport(0, 0, canvas.width, canvas.height);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-            self.draw();
+            self.draw(time);
           }
         }
       }
@@ -278,7 +278,72 @@ Scene.prototype._setViewport = function (x, y, width, height) {
   self._gl.viewport(x, y, width, height);
 };
 
-Scene.prototype.draw = function () {
+Scene.prototype._handleAnimation = function (time) {
+  var self = this,
+    hasAnimation = false;
+  self._objects.forEach(function (object) {
+    if (object.animations) {
+      if (!hasAnimation) {
+        hasAnimation = true;
+      }
+    } else {
+      return;
+    }
+    var node = object._node;
+    var hasMatrix = false;
+    object.animations.forEach(function (animation) {
+      if (!object.material.weights && animation.path === 'weights') {
+        return;
+      }
+      var input = animation.sampler.input;
+      var output = animation.sampler.splitOutput || animation.sampler.output;
+      var currentTime = time / 1000 % input[input.length - 1];
+      var previousTime, nextTime, previousValue, nextValue;
+      input.some(function (time, index) {
+        if (index !== 0 && time > currentTime) {
+          previousTime = input[index - 1];
+          nextTime = time;
+          previousValue = output[index - 1];
+          nextValue = output[index];
+          return true;
+        } else {
+          return false;
+        }
+      });
+      var t = (currentTime - previousTime) / (nextTime - previousTime);
+
+      if (animation.path === 'rotation') {
+        hasMatrix = true;
+        quat.slerp(node.rotation, previousValue, nextValue, t);
+      } else if (animation.path === 'translation') {
+        hasMatrix = true;
+        vec3.lerp(node.translation, previousValue, nextValue, t);
+      } else if (animation.path === 'scale') {
+        hasMatrix = true;
+        vec3.lerp(node.scale, previousValue, nextValue, t);
+      } else if (animation.path === 'weights') {
+        var t0 = 1 - t;
+        var weights = object.material.weights;
+        for (var i = 0; i < previousValue.length; i++) {
+          weights[i] = t0 * previousValue[i] + t * nextValue[i];
+        }
+      }
+    });
+    if (hasMatrix) {
+      mat4.fromRotationTranslationScale(
+        object._modelMatrix,
+        node.rotation || defaultRotation,
+        node.translation || defaultTranslation,
+        node.scale || defaultScale
+      );
+      mat3.normalFromMat4(object._normalMatrix, object._modelMatrix);
+    }
+  });
+
+  hasAnimation && self.redraw();
+}
+
+Scene.prototype.draw = function (time) {
   var self = this,
     // outputProgram = self._outputProgram,
     camera = self._camera,
@@ -287,6 +352,7 @@ Scene.prototype.draw = function () {
     viewMatrix = camera.getViewMatrix(),
     uniforms = self._uniforms;
   self._dirty = false;
+  self._handleAnimation(time);
   // self._framebuffer.bind();
   vec3.transformMat4(lightPosition, self._lightPosition, viewMatrix);
 
@@ -384,7 +450,7 @@ Scene.prototype.draw = function () {
       uniforms.u_shininess = material.shininess;
       uniforms.u_transparency = material.transparency;
 
-      uniforms.u_weights = vao._weights;
+      uniforms.u_weights = material.weights;
 
       program.use();
       program.setUniforms(uniforms);
