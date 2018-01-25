@@ -22,6 +22,12 @@ uniform mat4 u_modelViewProjectMatrix;
   uniform float u_weights[MORPH_TARGETS_COUNT];
 #endif
 
+#ifdef SKIN
+  attribute vec3 a_joint;
+  attribute vec3 a_weight;
+  uniform mat4 u_jointMatrix[SKIN_JOINTS_COUNT];
+#endif
+
 #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))
   attribute vec3 a_normal;
   #ifdef MORPH_TARGETS
@@ -118,6 +124,15 @@ void main () {
   #endif
 
   vec4 finalPosition = vec4(position, 1.0);
+
+  #ifdef SKIN
+    mat4 skinMat =
+      a_weight.x * u_jointMatrix[int(a_joint.x)] +
+      a_weight.y * u_jointMatrix[int(a_joint.y)] +
+      a_weight.z * u_jointMatrix[int(a_joint.z)] +
+      a_weight.w * u_jointMatrix[int(a_joint.w)];
+    finalPosition = skinMat * finalPosition;
+  #endif
 
   #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))
     vec3 finalNormal = a_normal;

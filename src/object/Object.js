@@ -13,6 +13,8 @@ wg.Object = function () {
   self._scale = vec3.fromValues(1, 1, 1);
   self._rotation = vec3.fromValues(0, 0, 0);
   self._matrixDirty = false;
+  self.parent = null;
+  self.children = [];
   self.material = new Material();
 };
 

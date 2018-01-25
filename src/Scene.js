@@ -58,6 +58,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
   self._autoResize = false;
   self._clipPane = [0, 0, 0, 0];
+  self._animations = [];
   self._handleResize = function () {
     self.setSize(window.innerWidth, window.innerHeight);
   };
@@ -278,25 +279,101 @@ Scene.prototype._setViewport = function (x, y, width, height) {
   self._gl.viewport(x, y, width, height);
 };
 
-Scene.prototype._handleAnimation = function (time) {
+Scene.prototype.loadGLTF = function (urlPath, name, callback) {
   var self = this,
-    hasAnimation = false;
-  self._objects.forEach(function (object) {
-    if (object.animations) {
-      if (!hasAnimation) {
-        hasAnimation = true;
+    gl = self._gl;
+  GLTFParser.parse(urlPath, name, function (data) {
+    console.log(data);
+    var meshes = [],
+      nodes = [];
+    data.meshes.forEach(function (mesh) {
+      var primitives = [],
+        meshObject = {
+          primitives: primitives
+        };
+      meshes.push(meshObject);
+      mesh.primitives.forEach(function (primitive) {
+        // TODO should not generate auto, if no normal, then no lights
+        var buffers = primitive.buffers;
+        if (!buffers.normal) {
+          buffers.normal = wg.Util.calculateNormals(buffers.position, buffers.index);
+        }
+        if (buffers.position0 && !buffers.normal0) {
+          buffers.normal0 = wg.Util.calculateNormals(buffers.position0, buffers.index);
+        }
+        // TODO tangent0, barycentric0
+        var primitive = {
+          vao: new wg.VertexArray(gl, primitive)
+        };
+        // TODO primitive.material
+        primitive.material = new wg.Material();
+        primitive.material.light = false;
+        primitive.material.diffuseColor = [0.5, 0.5, 0.5, 1];
+        if (mesh.weights) {
+          primitive.material.weights = mesh.weights;
+        }
+        primitives.push(primitive);
+      });
+    });
+    data.nodes.forEach(function (nodeObject) {
+      var object = new wg.Object();
+      var info = object._info = {};
+      nodeObject.rotation && (info.rotation = nodeObject.rotation);
+      nodeObject.translation && (info.translation = nodeObject.translation);
+      nodeObject.scale && (info.scale = nodeObject.scale);
+      nodeObject.weights && (info.weights = nodeObject.weights);
+      if (nodeObject.matrix) {
+        object._modelMatrix = nodeObject.matrix;
       }
-    } else {
-      return;
+      if (nodeObject.mesh != null) {
+        object.mesh = meshes[nodeObject.mesh];
+      }
+      // nodeObject.skin
+      nodes.push(object);
+    });
+    data.scenes.forEach(function (sceneObject) {
+      sceneObject.nodes.forEach(function (nodeIndex) {
+        addObject(nodeIndex);
+      });
+    });
+
+    // TODO which animation should be actived
+    data.animations.forEach(function (animation) {
+      animation.channels.forEach(function (channel) {
+        channel.node = nodes[channel.node];
+      });
+      self.addAnimation(animation);
+    });
+
+    callback && callback(nodes);
+
+    function addObject (nodeIndex, parent) {
+      var object = nodes[nodeIndex],
+        nodeObject = data.nodes[nodeIndex];
+      self.add(object);
+      if (parent) {
+        object.parent = parent;
+        parent.children.push(object);
+      }
+      if (nodeObject.children) {
+        nodeObject.children.forEach(function (childIndex) {
+          addObject(childIndex, object);
+        });
+      }
     }
-    var node = object._node;
-    var hasMatrix = false;
-    object.animations.forEach(function (animation) {
-      if (!object.material.weights && animation.path === 'weights') {
-        return;
-      }
-      var input = animation.sampler.input;
-      var output = animation.sampler.splitOutput || animation.sampler.output;
+  });
+};
+
+Scene.prototype.addAnimation = function (animation) {
+  this._animations.push(animation);
+};
+
+Scene.prototype._handleAnimation = function (time) {
+  var self = this;
+  self._animations.forEach(function (animation) {
+    animation.channels.forEach(function (channel) {
+      var input = channel.sampler.input;
+      var output = channel.sampler.splitOutput || channel.sampler.output;
       var currentTime = time / 1000 % input[input.length - 1];
       var previousTime, nextTime, previousValue, nextValue;
       input.some(function (time, index) {
@@ -312,35 +389,35 @@ Scene.prototype._handleAnimation = function (time) {
       });
       var t = (currentTime - previousTime) / (nextTime - previousTime);
 
-      if (animation.path === 'rotation') {
-        hasMatrix = true;
-        quat.slerp(node.rotation, previousValue, nextValue, t);
-      } else if (animation.path === 'translation') {
-        hasMatrix = true;
-        vec3.lerp(node.translation, previousValue, nextValue, t);
-      } else if (animation.path === 'scale') {
-        hasMatrix = true;
-        vec3.lerp(node.scale, previousValue, nextValue, t);
-      } else if (animation.path === 'weights') {
+      var node = channel.node;
+      var info = node._info;
+      if (channel.path === 'rotation') {
+        quat.slerp(info.rotation, previousValue, nextValue, t);
+      } else if (channel.path === 'translation') {
+        vec3.lerp(info.translation, previousValue, nextValue, t);
+      } else if (channel.path === 'scale') {
+        vec3.lerp(info.scale, previousValue, nextValue, t);
+      } else if (channel.path === 'weights') {
         var t0 = 1 - t;
-        var weights = object.material.weights;
+        var weights = info.weights;
         for (var i = 0; i < previousValue.length; i++) {
           weights[i] = t0 * previousValue[i] + t * nextValue[i];
         }
       }
+      if (channel.path !== 'weights') {
+        // TODO performance if one node have two animations
+        mat4.fromRotationTranslationScale(
+          node._modelMatrix,
+          info.rotation || defaultRotation,
+          info.translation || defaultTranslation,
+          info.scale || defaultScale
+        );
+        mat3.normalFromMat4(node._normalMatrix, node._modelMatrix);
+      }
     });
-    if (hasMatrix) {
-      mat4.fromRotationTranslationScale(
-        object._modelMatrix,
-        node.rotation || defaultRotation,
-        node.translation || defaultTranslation,
-        node.scale || defaultScale
-      );
-      mat3.normalFromMat4(object._normalMatrix, object._modelMatrix);
-    }
   });
 
-  hasAnimation && self.redraw();
+  self._animations.length && self.redraw();
 }
 
 Scene.prototype.draw = function (time) {
@@ -398,25 +475,26 @@ Scene.prototype.draw = function (time) {
   // self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self.getVertexArray(object),
-      material = object.material;
-    if (!vao) {
-      return;
-    }
-
-    if (!vao._parts) {
-      if (object.material.transparent !== gl._transparent) {
-        return;
+    if (object.mesh) {
+      object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
+      object.mesh.primitives.forEach(function (part) {
+        setProgram(part.material);
+        part.vao.draw();
+      });
+    } else {
+      var vao = self.getVertexArray(object);
+      if (vao) {
+        object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
+        if (vao._parts) {
+          vao.draw(preDrawCallback);
+        } else {
+          if (object.material.transparent === gl._transparent) {
+            setProgram(object.material);
+            vao.draw();
+          }
+        }
       }
     }
-
-    object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
-
-    if (!vao._parts) {
-      setProgram(material);
-    }
-
-    vao.draw(preDrawCallback);
 
     function setProgram (material) {
       var key = material.getKey(),
@@ -450,7 +528,7 @@ Scene.prototype.draw = function (time) {
       uniforms.u_shininess = material.shininess;
       uniforms.u_transparency = material.transparency;
 
-      uniforms.u_weights = material.weights;
+      uniforms.u_weights = object._info.weights || material.weights;
 
       program.use();
       program.setUniforms(uniforms);
@@ -503,6 +581,9 @@ Scene.prototype.getVertexArray = function (object) {
   if (object.vao) {
     return object.vao;
   }
+  if (!object.type) {
+    return null;
+  }
 
   var self = this,
     gl = self._gl,
@@ -511,16 +592,11 @@ Scene.prototype.getVertexArray = function (object) {
     vao = gl.cache.vaos[type];
   if (geometry) {
     if (!vao) {
-      vao = gl.cache.vaos[type] = new VertexArray(gl, {
-        buffers: geometry
-      });
+      vao = gl.cache.vaos[type] = new VertexArray(gl, geometry);
     }
     object.vao = vao;
     if (vao._color) {
       object.material.vertexColor = vao._color;
-    }
-    if (vao._weights) {
-      object.material.weights = vao._weights;
     }
   }
   return vao;

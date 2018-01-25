@@ -202,10 +202,12 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
   });
   // console.timeEnd('parse');
   return {
-    position: result.vertices,
-    normal: result.normals,
-    uv: result.uvs,
-    index: result.indices,
+    buffers: {
+      position: result.vertices,
+      normal: result.normals,
+      uv: result.uvs,
+      index: result.indices
+    },
     parts: result.parts
   };
 };

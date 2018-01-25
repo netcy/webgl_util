@@ -19,20 +19,5 @@ function init () {
 
   // var gui = createGUI(scene);
 
-  wg.GLTFParser.parse('gltf/SimpleMorph', 'SimpleMorph', function (data) {
-    console.log(data);
-    var geometry = data.geometries[0];
-    wg.Util.addGeometry('SimpleMorph', geometry);
-
-    data.nodes.forEach(function (node) {
-      var object = window.object = new wg.Object();
-      object.type = 'SimpleMorph';
-        object.animations = node.animations;
-        object._node = node;
-        if (node.matrix) {
-          object._modelMatrix = node.matrix;
-        }
-      scene.add(object);
-    });
-  });
+  scene.loadGLTF('gltf/SimpleMorph', 'SimpleMorph');
 }

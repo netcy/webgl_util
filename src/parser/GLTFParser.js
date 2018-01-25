@@ -27,7 +27,6 @@ var GLTFParser = wg.GLTFParser = {},
     translation: 3,
     rotation: 4,
     scale: 3,
-    // weights
   };
 
 GLTFParser.parse = function (urlPath, name, callback) {
@@ -38,9 +37,10 @@ GLTFParser.parse = function (urlPath, name, callback) {
       currentBufferCount = 0,
       bufferCount = json.buffers.length,
       accessors = [],
-      geometries = [],
+      meshes = [],
+      skins = [],
       nodes = [],
-      nodeMap = {};
+      animations = [];
 
     json.buffers.forEach(function (buffer, index) {
       if (buffer.uri.indexOf('data:') === 0) {
@@ -64,13 +64,13 @@ GLTFParser.parse = function (urlPath, name, callback) {
       json.accessors.forEach(function (accessor) {
         var arrayType = componentTypeMap[accessor.componentType],
           bufferView = json.bufferViews[accessor.bufferView],
-          // bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
+          // TODO bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
           buffer = buffers[bufferView.buffer],
           offset = accessor.byteOffset + bufferView.byteOffset,
           typeSize = typeMap[accessor.type],
           count = accessor.count;
           length = count * typeSize;
-        // accessor.max, accessor.min
+        // TODO accessor.max, accessor.min
         accessors.push({
           buffer: new arrayType(buffer, offset, length),
           offset: offset,
@@ -81,145 +81,150 @@ GLTFParser.parse = function (urlPath, name, callback) {
       });
 
       json.meshes.forEach(function (mesh) {
-        // TODO Handle multi primitives
-        // mesh.name
+        var primitives = [],
+          meshObject = {
+            primitives: primitives
+          };
+        meshes.push(meshObject);
+        (mesh.name != null) && (meshObject.name = mesh.name);
+        (mesh.weights != null) && (meshObject.weights = mesh.weights);
         mesh.primitives.forEach(function (primitive) {
-          var geometry = {},
-            targets;
-          geometries.push(geometry);
-          if (primitive.mode != null) {
-            geometry.mode = modeMap[primitive.mode];
-          }
+          var buffers = {},
+            primitiveObject = {
+              buffers: buffers
+            };
+          primitives.push(primitiveObject);
+          (primitive.mode != null) && (primitiveObject.mode = modeMap[primitive.mode]);
           Object.keys(primitive.attributes).forEach(function (attributeKey) {
             var buffer = accessors[primitive.attributes[attributeKey]].buffer;
             switch (attributeKey) {
               case 'POSITION':
-                geometry.position = buffer;
+                buffers.position = buffer;
                 break;
               case 'NORMAL':
-                geometry.normal = buffer;
+                buffers.normal = buffer;
                 break;
               case 'TANGENT':
-                geometry.tangent = buffer;
+                buffers.tangent = buffer;
                 break;
               case 'TEXCOORD_0':
-                geometry.uv = buffer;
+                buffers.uv = buffer;
                 break;
               case 'TEXCOORD_1':
                 break;
               case 'COLOR_0':
-                geometry.color = buffer;
+                buffers.color = buffer;
                 break;
               case 'JOINTS_0':
+                buffers.joint = buffer;
                 break;
               case 'WEIGHTS_0':
+                buffers.weight = buffer;
                 break;
             }
           });
           if (primitive.targets) {
-            targets = geometry.targets = [];
-            primitive.targets.forEach(function (target) {
-              var geometryTarget = {};
-              targets.push(geometryTarget);
-              if (target.POSITION) {
-                geometryTarget.position = accessors[target.POSITION].buffer;
-              }
+            meshObject.targetCount = primitive.targets.length;
+            primitive.targets.forEach(function (target, index) {
+              buffers['position' + index] = accessors[target.POSITION].buffer;
               if (target.NORMAL) {
-                geometryTarget.normal = accessors[target.NORMAL].buffer;
+                buffers['normal' + index] = accessors[target.NORMAL].buffer;
               }
               if (target.TANGENT) {
-                geometryTarget.tangent = accessors[target.TANGENT].buffer;
+                buffers['tangent' + index] = accessors[target.TANGENT].buffer;
               }
             });
-            // TODO how multi primitives match one mesh.weights
-            if (mesh.weights) {
-              geometry.weights = mesh.weights;
-            }
           }
-          /*
-          primitive.material*/
+          // TODO primitive.material
           if (primitive.indices != null) {
-            geometry.index = accessors[primitive.indices].buffer;
+            buffers.index = accessors[primitive.indices].buffer;
           }
         });
       });
 
-      // TODO multi scenes
-      json.scenes.forEach(function (scene) {
-        // scene.name
-        scene.nodes && scene.nodes.forEach(function (nodeIndex) {
-          var node = json.nodes[nodeIndex],
-            matrix, nodeObject;
-          if (node.matrix) {
-            matrix = mat4.create();
-            mat4.copy(matrix, node.matrix);
-          } else if (node.rotation || node.scale || node.translation) {
-            matrix = mat4.create();
-            mat4.fromRotationTranslationScale(
-              matrix,
-              node.rotation || defaultRotation,
-              node.translation || defaultTranslation,
-              node.scale || defaultScale
-            );
-          }
-          if (node.camera != null) {
-            ;
-          } else if (node.mesh != null) {
-            nodeObject = {
-              name: node.name,
-              matrix: matrix,
-              geometry: node.mesh, // TODO
-              rotation: node.rotation,
-              translation: node.translation,
-              scale: node.scale
-            };
-            nodes.push(nodeObject);
-            nodeMap[nodeIndex] = nodeObject;
-            if (node.children) {
-              node.children.forEach(function (child) {
-                ;
-              });
-            }
-            if (node.skin != null) {
-              ;
-            }
-            // TODO node.weights will override mesh.weights
-            if (node.weights) {
-              nodeObject.weights = node.weights;
-            }
-          }
-        });
+      json.nodes && json.nodes.forEach(function (node) {
+        var nodeObject = {},
+          matrix;
+        nodes.push(nodeObject);
+        (node.name != null) && (nodeObject.name = node.name);
+        node.rotation && (nodeObject.rotation = node.rotation);
+        node.translation && (nodeObject.translation = node.translation);
+        node.scale && (nodeObject.scale = node.scale);
+        node.weights && (nodeObject.weights = node.weights);
+        node.children && (nodeObject.children = node.children);
+        if (node.matrix) {
+          matrix = mat4.create();
+          mat4.copy(matrix, node.matrix);
+        } else if (node.rotation || node.scale || node.translation) {
+          matrix = mat4.create();
+          mat4.fromRotationTranslationScale(
+            matrix,
+            node.rotation || defaultRotation,
+            node.translation || defaultTranslation,
+            node.scale || defaultScale
+          );
+        }
+        if (matrix) {
+          nodeObject.matrix = matrix;
+        }
+        if (node.mesh != null) {
+          nodeObject.mesh = node.mesh;
+        }
+        if (node.camera != null) {
+          // TODO
+        }
       });
 
-      // TODO mutil animations
+      json.skins && json.skins.forEach(function (skin) {
+        var skinObject = {
+          inverseBindMatrices: accessors[skin.inverseBindMatrices],
+          joints: skin.joints
+        };
+        skins.push(skinObject);
+      });
+
+      json.nodes && json.nodes.forEach(function (node, index) {
+        var nodeObject = nodes[index];
+        if (node.skin != null) {
+          nodeObject.skin = skins[node.skin];
+        }
+      });
+
       json.animations && json.animations.forEach(function (animation) {
-        // animation.name
-        var samplerObjects = [];
+        var channels = [],
+          animationObject = {
+            channels: channels
+          },
+          samples = [];
+        animations.push(animationObject);
+        (animation.name != null) && (animationObject.name = animation.name);
         animation.samplers.forEach(function (sampler) {
-          samplerObjects.push({
+          samples.push({
             input: accessors[sampler.input].buffer,
             interpolation: sampler.interpolation, // 'LINEAR', 'STEP', 'CUBICSPLINE'
             output: accessors[sampler.output],
           });
         });
         animation.channels.forEach(function (channel) {
-          var node = nodeMap[channel.target.node];
-          var geometry = geometries[node.geometry];
+          var node = nodes[channel.target.node];
+          var mesh = meshes[node.mesh];
           var path = channel.target.path;
-          var animations = node.animations || (node.animations = []);
 
-          var samplerObject = samplerObjects[channel.sampler];
+          var samplerObject = samples[channel.sampler];
           var accessorObject = samplerObject.output;
           var buffer = accessorObject.buffer.buffer;
           var output = [];
           if (path === 'weights') {
-            var targetCount = geometry.targets.length;
+            var targetCount = mesh.targetCount;
             var count = accessorObject.count / targetCount;
             for (var i = 0; i < count; i++) {
               var offset = accessorObject.offset + i * 4 * targetCount;
               output.push(new Float32Array(buffer, offset, targetCount));
             }
             samplerObject.splitOutput = output;
+            if (!node.weights) {
+              node.weights = mesh.weights.slice(0);
+            }
           } else {
             var size = targetPathSizeMap[path];
             for (var i = 0; i < accessorObject.count; i++) {
@@ -237,8 +242,8 @@ GLTFParser.parse = function (urlPath, name, callback) {
               node.scale = vec3.create();
             }
           }
-
-          animations.push({
+          channels.push({
+            node: channel.target.node,
             sampler: samplerObject,
             path: path // 'translation', 'rotation', 'scale', 'weights'
           });
@@ -246,8 +251,10 @@ GLTFParser.parse = function (urlPath, name, callback) {
       });
 
       callback({
-        geometries: geometries,
-        nodes: nodes
+        nodes: nodes,
+        scenes: json.scenes,
+        meshes: meshes,
+        animations: animations
       });
     }
   });

@@ -1,23 +1,23 @@
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
-  if (!geometry.normal) {
-    geometry.normal = calculateNormals(geometry.position, geometry.index);
+  // TODO should not generate auto, if no normal, then no lights
+  var buffers = geometry.buffers;
+  if (!buffers.normal) {
+    buffers.normal = calculateNormals(buffers.position, buffers.index);
   }
-  if (!geometry.tangent && geometry.uv) {
-    geometry = calculateTangent(geometry);
+  if (buffers.position0 && !buffers.normal0) {
+    buffers.normal0 = calculateNormals(buffers.position0, buffers.index);
   }
-  if (geometry.tangent) {
-    geometry = calculateBarycentric(geometry);
+  // TODO tangent0, barycentric0
+  if (!buffers.tangent && buffers.uv) {
+    buffers = calculateTangent(buffers);
   }
-  if (geometry.targets) {
-    geometry.targets.forEach(function (target) {
-      if (!target.normal) {
-        target.normal = calculateNormals(target.position, geometry.index);
-      }
-      // TODO tangent, barycentric
-    });
+  if (buffers.tangent) {
+    buffers = calculateBarycentric(buffers);
   }
+  geometry.buffers = buffers;
   wg.geometries[name] = geometry;
+  return geometry;
 };
 
 var createCube = Util.createCube = function (side) {
@@ -228,7 +228,7 @@ function createTruncatedCone(
 
 
 //indices have to be completely defined NO TRIANGLE_STRIP only TRIANGLES
-function calculateNormals (vs, ind) {
+var calculateNormals = Util.calculateNormals = function (vs, ind) {
   var x = 0;
   var y = 1;
   var z = 2;
@@ -405,8 +405,8 @@ function createPlane () {
   };
 }
 
-addGeometry('cube', createCube(1));
-addGeometry('torus', createTorus(32, 32, 0.5, 1));
-addGeometry('sphere', createSphere(32, 32, 0.5));
-addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
-addGeometry('plane', createPlane());
+addGeometry('cube', { buffers: createCube(1) });
+addGeometry('torus', { buffers: createTorus(32, 32, 0.5, 1) });
+addGeometry('sphere', { buffers: createSphere(32, 32, 0.5) });
+addGeometry('cone', { buffers: createTruncatedCone(0.5, 0, 1, 32, 32, false, true) });
+addGeometry('plane', { buffers: createPlane() });

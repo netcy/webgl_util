@@ -9,8 +9,7 @@
  *       uv: [],
  *       tangent: [],
  *       color: [],
- *       index: [],
- *       targets: [{ position: [], normal: [], tangent: [] }]
+ *       index: []
  *     },
  *     offset: 0,
  *     mode: 'TRIANGLES'
@@ -26,10 +25,6 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
-    if (attrName === 'weights') {
-      self._weights = buffers[attrName];
-      return;
-    }
     var bufferData = buffers[attrName];
     var bufferObject = gl.createBuffer();
     self._bufferMap[attrName] = bufferObject;
@@ -61,23 +56,6 @@ var VertexArray = wg.VertexArray = function (gl, options) {
       self._element_size = element_size;
       self._count = bufferData.length;
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
-    } else if (attrName === 'targets') {
-      self._bufferMap.targets = {};
-      // TODO targets.length > 4
-      buffers.targets.forEach(function (target, index) {
-        createBuffer('position' + index, target.position);
-        createBuffer('normal' + index, target.normal);
-        createBuffer('tangent' + index, target.tangent);
-
-        function createBuffer (name, data) {
-          if (data) {
-            var targetBufferObject = gl.createBuffer();
-            self._bufferMap[name] = targetBufferObject;
-            gl.bindBuffer(gl.ARRAY_BUFFER, targetBufferObject);
-            gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-          }
-        }
-      });
     } else {
       gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
@@ -93,7 +71,7 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
   self._offset = options.offset || 0;
   self._mode = gl[options.mode || 'TRIANGLES'];
-  self._parts = options.buffers.parts;
+  self._parts = options.parts;
 };
 
 VertexArray.prototype.setPosition = function (datas) {

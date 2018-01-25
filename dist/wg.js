@@ -286,24 +286,24 @@ Object.assign(Trigger.prototype, {
 // Source: src/Geometries.js
 wg.geometries = {};
 var addGeometry = Util.addGeometry = function (name, geometry) {
-  if (!geometry.normal) {
-    geometry.normal = calculateNormals(geometry.position, geometry.index);
+  // TODO should not generate auto, if no normal, then no lights
+  var buffers = geometry.buffers;
+  if (!buffers.normal) {
+    buffers.normal = calculateNormals(buffers.position, buffers.index);
   }
-  if (!geometry.tangent && geometry.uv) {
-    geometry = calculateTangent(geometry);
+  if (buffers.position0 && !buffers.normal0) {
+    buffers.normal0 = calculateNormals(buffers.position0, buffers.index);
   }
-  if (geometry.tangent) {
-    geometry = calculateBarycentric(geometry);
+  // TODO tangent0, barycentric0
+  if (!buffers.tangent && buffers.uv) {
+    buffers = calculateTangent(buffers);
   }
-  if (geometry.targets) {
-    geometry.targets.forEach(function (target) {
-      if (!target.normal) {
-        target.normal = calculateNormals(target.position, geometry.index);
-      }
-      // TODO tangent, barycentric
-    });
+  if (buffers.tangent) {
+    buffers = calculateBarycentric(buffers);
   }
+  geometry.buffers = buffers;
   wg.geometries[name] = geometry;
+  return geometry;
 };
 
 var createCube = Util.createCube = function (side) {
@@ -514,7 +514,7 @@ function createTruncatedCone(
 
 
 //indices have to be completely defined NO TRIANGLE_STRIP only TRIANGLES
-function calculateNormals (vs, ind) {
+var calculateNormals = Util.calculateNormals = function (vs, ind) {
   var x = 0;
   var y = 1;
   var z = 2;
@@ -691,11 +691,11 @@ function createPlane () {
   };
 }
 
-addGeometry('cube', createCube(1));
-addGeometry('torus', createTorus(32, 32, 0.5, 1));
-addGeometry('sphere', createSphere(32, 32, 0.5));
-addGeometry('cone', createTruncatedCone(0.5, 0, 1, 32, 32, false, true));
-addGeometry('plane', createPlane());
+addGeometry('cube', { buffers: createCube(1) });
+addGeometry('torus', { buffers: createTorus(32, 32, 0.5, 1) });
+addGeometry('sphere', { buffers: createSphere(32, 32, 0.5) });
+addGeometry('cone', { buffers: createTruncatedCone(0.5, 0, 1, 32, 32, false, true) });
+addGeometry('plane', { buffers: createPlane() });
 
 // Source: src/Program.js
 var attributeSizeMap = {
@@ -1279,8 +1279,7 @@ TextureCache.prototype.get = function (image) {
  *       uv: [],
  *       tangent: [],
  *       color: [],
- *       index: [],
- *       targets: [{ position: [], normal: [], tangent: [] }]
+ *       index: []
  *     },
  *     offset: 0,
  *     mode: 'TRIANGLES'
@@ -1296,10 +1295,6 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
   gl.bindVertexArray(self._vao);
   Object.keys(buffers).forEach(function (attrName) {
-    if (attrName === 'weights') {
-      self._weights = buffers[attrName];
-      return;
-    }
     var bufferData = buffers[attrName];
     var bufferObject = gl.createBuffer();
     self._bufferMap[attrName] = bufferObject;
@@ -1331,23 +1326,6 @@ var VertexArray = wg.VertexArray = function (gl, options) {
       self._element_size = element_size;
       self._count = bufferData.length;
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
-    } else if (attrName === 'targets') {
-      self._bufferMap.targets = {};
-      // TODO targets.length > 4
-      buffers.targets.forEach(function (target, index) {
-        createBuffer('position' + index, target.position);
-        createBuffer('normal' + index, target.normal);
-        createBuffer('tangent' + index, target.tangent);
-
-        function createBuffer (name, data) {
-          if (data) {
-            var targetBufferObject = gl.createBuffer();
-            self._bufferMap[name] = targetBufferObject;
-            gl.bindBuffer(gl.ARRAY_BUFFER, targetBufferObject);
-            gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-          }
-        }
-      });
     } else {
       gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
@@ -1363,7 +1341,7 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
   self._offset = options.offset || 0;
   self._mode = gl[options.mode || 'TRIANGLES'];
-  self._parts = options.buffers.parts;
+  self._parts = options.parts;
 };
 
 VertexArray.prototype.setPosition = function (datas) {
@@ -1485,7 +1463,7 @@ VertexArray.prototype.dispose = function () {
 };
 
 // Source: src/shader/Shader.js
-var defaultVertexShader = 'attribute vec3 a_position;\nuniform mat4 u_modelViewProjectMatrix;\n\n#ifdef VERTEX_COLOR\n  attribute vec4 a_color;\n  varying vec4 v_color;\n#endif\n\n#ifdef MORPH_TARGETS\n  #if MORPH_TARGETS_COUNT > 0\n    attribute vec3 a_position0;\n  #endif\n  #if MORPH_TARGETS_COUNT > 1\n    attribute vec3 a_position1;\n  #endif\n  #if MORPH_TARGETS_COUNT > 2\n    attribute vec3 a_position2;\n  #endif\n  #if MORPH_TARGETS_COUNT > 3\n    attribute vec3 a_position3;\n  #endif\n  uniform float u_weights[MORPH_TARGETS_COUNT];\n#endif\n\n#if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n  attribute vec3 a_normal;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_normal0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_normal1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_normal2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_normal3;\n    #endif\n  #endif\n#endif\n\n#if defined(LIGHT) && defined(NORMAL_MAP)\n  attribute vec3 a_tangent;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_tangent0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_tangent1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_tangent2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_tangent3;\n    #endif\n  #endif\n#endif\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  attribute vec2 a_uv;\n  uniform vec2 u_textureScale;\n  varying vec2 v_uv;\n#endif\n\n#if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n  uniform mat3 u_normalMatrix;\n  varying vec3 v_normal;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat4 u_viewMatrix;\n  varying vec4 v_viewPosition;\n#endif\n\n#if defined(LIGHT) || defined(ENV_MAP)\n  uniform mat3 u_normalViewMatrix;\n#endif\n\n#ifdef LIGHT\n  uniform mat4 u_modelViewMatrix;\n  uniform vec3 u_lightPosition;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n#endif\n\n#ifdef WIREFRAME\n  attribute vec3 a_barycentric;\n  varying vec3 v_barycentric;\n#endif\n\n#ifdef CLIPPLANE\n  uniform mat4 u_modelMatrix;\n  varying vec4 v_position;\n#endif\n\nvoid main () {\n  vec3 position = a_position;\n\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      position += a_position0 * u_weights[0];\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      position += a_position1 * u_weights[1];\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      position += a_position2 * u_weights[2];\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      position += a_position3 * u_weights[3];\n    #endif\n  #endif\n\n  vec4 finalPosition = vec4(position, 1.0);\n\n  #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n    vec3 finalNormal = a_normal;\n    #ifdef MORPH_TARGETS\n      #if MORPH_TARGETS_COUNT > 0\n        finalNormal += a_normal0 * u_weights[0];\n      #endif\n      #if MORPH_TARGETS_COUNT > 1\n        finalNormal += a_normal1 * u_weights[1];\n      #endif\n      #if MORPH_TARGETS_COUNT > 2\n        finalNormal += a_normal2 * u_weights[2];\n      #endif\n      #if MORPH_TARGETS_COUNT > 3\n        finalNormal += a_normal3 * u_weights[3];\n      #endif\n    #endif\n  #endif\n\n  #if defined(LIGHT) && defined(NORMAL_MAP)\n    vec3 finalTangent = a_tangent;\n    #ifdef MORPH_TARGETS\n      #if MORPH_TARGETS_COUNT > 0\n        finalTangent += a_tangent0 * u_weights[0];\n      #endif\n      #if MORPH_TARGETS_COUNT > 1\n        finalTangent += a_tangent1 * u_weights[1];\n      #endif\n      #if MORPH_TARGETS_COUNT > 2\n        finalTangent += a_tangent2 * u_weights[2];\n      #endif\n      #if MORPH_TARGETS_COUNT > 3\n        finalTangent += a_tangent3 * u_weights[3];\n      #endif\n    #endif\n  #endif\n\n  #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)\n    #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n      v_normal = u_normalMatrix * finalNormal;\n    #endif\n\n    #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n      v_uv = a_uv * u_textureScale;\n    #endif\n\n    #ifdef LIGHT\n      vec3 viewPosition = (u_modelViewMatrix * finalPosition).xyz;\n      v_lightDirection = u_lightPosition - viewPosition;\n      v_eyeDirection = -viewPosition;\n\n      #ifdef NORMAL_MAP\n        mat3 modelViewMatrix3 = mat3(u_modelViewMatrix);\n        vec3 normal = normalize(modelViewMatrix3 * finalNormal);\n        vec3 tangent = normalize(modelViewMatrix3 * finalTangent);\n        vec3 bitangent = cross(normal, tangent);\n        mat3 tbnMatrix = mat3(\n          tangent.x, bitangent.x, normal.x,\n          tangent.y, bitangent.y, normal.y,\n          tangent.z, bitangent.z, normal.z\n        );\n        v_lightDirection = tbnMatrix * v_lightDirection;\n        v_eyeDirection = tbnMatrix * v_eyeDirection;\n      #else\n        v_normalView = u_normalViewMatrix * finalNormal;\n      #endif\n    #else\n      #if defined(ENV_MAP)\n        v_normalView = u_normalViewMatrix * finalNormal;\n      #endif\n    #endif\n\n    #ifdef ENV_MAP\n      v_viewPosition = u_viewMatrix * finalPosition;\n    #endif\n\n    #ifdef VERTEX_COLOR\n      v_color = a_color;\n    #endif\n  #endif\n\n  #ifdef WIREFRAME\n    v_barycentric = a_barycentric;\n  #endif\n\n  #ifdef CLIPPLANE\n    v_position = finalPosition;\n  #endif\n\n  gl_Position = u_modelViewProjectMatrix * finalPosition;\n}\n';
+var defaultVertexShader = 'attribute vec3 a_position;\nuniform mat4 u_modelViewProjectMatrix;\n\n#ifdef VERTEX_COLOR\n  attribute vec4 a_color;\n  varying vec4 v_color;\n#endif\n\n#ifdef MORPH_TARGETS\n  #if MORPH_TARGETS_COUNT > 0\n    attribute vec3 a_position0;\n  #endif\n  #if MORPH_TARGETS_COUNT > 1\n    attribute vec3 a_position1;\n  #endif\n  #if MORPH_TARGETS_COUNT > 2\n    attribute vec3 a_position2;\n  #endif\n  #if MORPH_TARGETS_COUNT > 3\n    attribute vec3 a_position3;\n  #endif\n  uniform float u_weights[MORPH_TARGETS_COUNT];\n#endif\n\n#ifdef SKIN\n  attribute vec3 a_joint;\n  attribute vec3 a_weight;\n  uniform mat4 u_jointMatrix[SKIN_JOINTS_COUNT];\n#endif\n\n#if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n  attribute vec3 a_normal;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_normal0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_normal1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_normal2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_normal3;\n    #endif\n  #endif\n#endif\n\n#if defined(LIGHT) && defined(NORMAL_MAP)\n  attribute vec3 a_tangent;\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      attribute vec3 a_tangent0;\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      attribute vec3 a_tangent1;\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      attribute vec3 a_tangent2;\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      attribute vec3 a_tangent3;\n    #endif\n  #endif\n#endif\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  attribute vec2 a_uv;\n  uniform vec2 u_textureScale;\n  varying vec2 v_uv;\n#endif\n\n#if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n  uniform mat3 u_normalMatrix;\n  varying vec3 v_normal;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat4 u_viewMatrix;\n  varying vec4 v_viewPosition;\n#endif\n\n#if defined(LIGHT) || defined(ENV_MAP)\n  uniform mat3 u_normalViewMatrix;\n#endif\n\n#ifdef LIGHT\n  uniform mat4 u_modelViewMatrix;\n  uniform vec3 u_lightPosition;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n#endif\n\n#ifdef WIREFRAME\n  attribute vec3 a_barycentric;\n  varying vec3 v_barycentric;\n#endif\n\n#ifdef CLIPPLANE\n  uniform mat4 u_modelMatrix;\n  varying vec4 v_position;\n#endif\n\nvoid main () {\n  vec3 position = a_position;\n\n  #ifdef MORPH_TARGETS\n    #if MORPH_TARGETS_COUNT > 0\n      position += a_position0 * u_weights[0];\n    #endif\n    #if MORPH_TARGETS_COUNT > 1\n      position += a_position1 * u_weights[1];\n    #endif\n    #if MORPH_TARGETS_COUNT > 2\n      position += a_position2 * u_weights[2];\n    #endif\n    #if MORPH_TARGETS_COUNT > 3\n      position += a_position3 * u_weights[3];\n    #endif\n  #endif\n\n  vec4 finalPosition = vec4(position, 1.0);\n\n  #ifdef SKIN\n    mat4 skinMat =\n      a_weight.x * u_jointMatrix[int(a_joint.x)] +\n      a_weight.y * u_jointMatrix[int(a_joint.y)] +\n      a_weight.z * u_jointMatrix[int(a_joint.z)] +\n      a_weight.w * u_jointMatrix[int(a_joint.w)];\n    finalPosition = skinMat * finalPosition;\n  #endif\n\n  #if (defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) || defined(ENV_MAP))\n    vec3 finalNormal = a_normal;\n    #ifdef MORPH_TARGETS\n      #if MORPH_TARGETS_COUNT > 0\n        finalNormal += a_normal0 * u_weights[0];\n      #endif\n      #if MORPH_TARGETS_COUNT > 1\n        finalNormal += a_normal1 * u_weights[1];\n      #endif\n      #if MORPH_TARGETS_COUNT > 2\n        finalNormal += a_normal2 * u_weights[2];\n      #endif\n      #if MORPH_TARGETS_COUNT > 3\n        finalNormal += a_normal3 * u_weights[3];\n      #endif\n    #endif\n  #endif\n\n  #if defined(LIGHT) && defined(NORMAL_MAP)\n    vec3 finalTangent = a_tangent;\n    #ifdef MORPH_TARGETS\n      #if MORPH_TARGETS_COUNT > 0\n        finalTangent += a_tangent0 * u_weights[0];\n      #endif\n      #if MORPH_TARGETS_COUNT > 1\n        finalTangent += a_tangent1 * u_weights[1];\n      #endif\n      #if MORPH_TARGETS_COUNT > 2\n        finalTangent += a_tangent2 * u_weights[2];\n      #endif\n      #if MORPH_TARGETS_COUNT > 3\n        finalTangent += a_tangent3 * u_weights[3];\n      #endif\n    #endif\n  #endif\n\n  #if !defined(WIREFRAME) || !defined(WIREFRAME_ONLY)\n    #if defined(DIFFUSE_MAP) && defined(DIFFUSE_CUBE_MAP)\n      v_normal = u_normalMatrix * finalNormal;\n    #endif\n\n    #if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n      v_uv = a_uv * u_textureScale;\n    #endif\n\n    #ifdef LIGHT\n      vec3 viewPosition = (u_modelViewMatrix * finalPosition).xyz;\n      v_lightDirection = u_lightPosition - viewPosition;\n      v_eyeDirection = -viewPosition;\n\n      #ifdef NORMAL_MAP\n        mat3 modelViewMatrix3 = mat3(u_modelViewMatrix);\n        vec3 normal = normalize(modelViewMatrix3 * finalNormal);\n        vec3 tangent = normalize(modelViewMatrix3 * finalTangent);\n        vec3 bitangent = cross(normal, tangent);\n        mat3 tbnMatrix = mat3(\n          tangent.x, bitangent.x, normal.x,\n          tangent.y, bitangent.y, normal.y,\n          tangent.z, bitangent.z, normal.z\n        );\n        v_lightDirection = tbnMatrix * v_lightDirection;\n        v_eyeDirection = tbnMatrix * v_eyeDirection;\n      #else\n        v_normalView = u_normalViewMatrix * finalNormal;\n      #endif\n    #else\n      #if defined(ENV_MAP)\n        v_normalView = u_normalViewMatrix * finalNormal;\n      #endif\n    #endif\n\n    #ifdef ENV_MAP\n      v_viewPosition = u_viewMatrix * finalPosition;\n    #endif\n\n    #ifdef VERTEX_COLOR\n      v_color = a_color;\n    #endif\n  #endif\n\n  #ifdef WIREFRAME\n    v_barycentric = a_barycentric;\n  #endif\n\n  #ifdef CLIPPLANE\n    v_position = finalPosition;\n  #endif\n\n  gl_Position = u_modelViewProjectMatrix * finalPosition;\n}\n';
 var defaultFragmentShader = '#ifdef VERTEX_COLOR\n  varying vec4 v_color;\n#endif\n\n#ifdef DIFFUSE_MAP\n  #ifdef DIFFUSE_CUBE_MAP\n    uniform samplerCube u_diffuseSampler;\n    varying vec3 v_normal;\n  #else\n    uniform sampler2D u_diffuseSampler;\n  #endif\n#endif\n\nuniform vec4 u_diffuseColor;\n\n#if (defined(DIFFUSE_MAP) && !defined(DIFFUSE_CUBE_MAP)) || (defined(LIGHT) && defined(NORMAL_MAP))\n  varying vec2 v_uv;\n#endif\n\n#if (defined(LIGHT) && !defined(NORMAL_MAP)) || defined(ENV_MAP)\n  varying vec3 v_normalView;\n#endif\n\n#ifdef ENV_MAP\n  uniform mat3 u_modelViewInvMatrix;\n  uniform samplerCube u_envSampler;\n  varying vec4 v_viewPosition;\n#endif\n\n#ifdef LIGHT\n  uniform vec3 u_lightColor;\n  uniform vec3 u_lightAmbientColor;\n  uniform vec4 u_ambientColor;\n  uniform vec4 u_emissiveColor;\n  uniform float u_shininess;\n  varying vec3 v_lightDirection;\n  varying vec3 v_eyeDirection;\n\n  #ifdef AMBIENT_MAP\n    uniform sampler2D u_ambientSampler;\n  #endif\n  #ifdef SPECULAR_MAP\n    uniform sampler2D u_specularSampler;\n  #else\n    uniform vec4 u_specularColor;\n  #endif\n  #ifdef EMISSIVE_MAP\n    uniform sampler2D u_emissiveSampler;\n  #endif\n  #ifdef NORMAL_MAP\n    uniform sampler2D u_normalSampler;\n  #endif\n#endif\n\n#ifdef WIREFRAME\n  uniform vec3 u_wireframeColor;\n  uniform float u_wireframeWidth;\n  varying vec3 v_barycentric;\n\n  float edgeFactor () {\n    vec3 d = fwidth(v_barycentric);\n    vec3 a3 = smoothstep(vec3(0.0), d * u_wireframeWidth, v_barycentric);\n    return min(min(a3.x, a3.y), a3.z);\n  }\n#endif\n\n#ifdef CLIPPLANE\n  uniform vec4 u_clipPlane;\n  varying vec4 v_position;\n#endif\n\nuniform float u_transparency;\n\nvoid main () {\n  #ifdef CLIPPLANE\n    float clipDistance = dot(v_position.xyz, u_clipPlane.xyz);\n    if (clipDistance >= u_clipPlane.w) {\n      discard;\n    }\n  #endif\n\n  #if defined(WIREFRAME) && defined(WIREFRAME_ONLY)\n    gl_FragColor = vec4(u_wireframeColor, (1.0 - edgeFactor()) * u_transparency);\n  #else\n    #ifdef DIFFUSE_MAP\n      #ifdef DIFFUSE_CUBE_MAP\n        vec4 color = textureCube(u_diffuseSampler, v_normal);\n      #else\n        vec4 color = texture2D(u_diffuseSampler, v_uv);\n      #endif\n    #else\n      vec4 color = vec4(1.0);\n    #endif\n\n    #ifdef VERTEX_COLOR\n      color *= v_color;\n    #endif\n\n    #ifdef ENV_MAP\n      vec3 N = v_normalView;\n      vec3 V = v_viewPosition.xyz;\n      vec3 R = reflect(V, N);\n      R = u_modelViewInvMatrix * R;\n      color = textureCube(u_envSampler, R) * color;\n    #endif\n\n    color.a *= u_transparency;\n\n    #ifdef LIGHT\n      #ifdef NORMAL_MAP\n        vec3 normal = normalize((texture2D(u_normalSampler, v_uv) * 2.0 - 1.0).rgb);\n      #else\n        vec3 normal = normalize(v_normalView);\n      #endif\n\n      vec3 lightDirection = normalize(v_lightDirection);\n      vec3 eyeDirection = normalize(v_eyeDirection);\n      float diffuse = max(dot(lightDirection, normal), 0.0);\n\n      vec3 reflectDirection = reflect(-lightDirection, normal);\n      float specular = 0.0;\n      if (u_shininess > 0.0) {\n        specular = pow(max(dot(reflectDirection, eyeDirection), 0.0), u_shininess);\n      }\n\n      #ifdef AMBIENT_MAP\n        vec3 ambientSamplerColor = texture2D(u_ambientSampler, v_uv).rgb;\n      #else\n        vec3 ambientSamplerColor = vec3(1.0);\n      #endif\n\n      #ifdef SPECULAR_MAP\n        vec4 specularMaterialColor = texture2D(u_specularSampler, v_uv);\n      #else\n        vec4 specularMaterialColor = u_specularColor;\n      #endif\n\n      vec4 emissiveColor = u_emissiveColor;\n      #ifdef EMISSIVE_MAP\n        emissiveColor += texture2D(u_emissiveSampler, v_uv);\n      #endif\n\n      vec3 ambientColor = u_lightAmbientColor * u_ambientColor.rgb;\n      vec3 diffuseColor = u_lightColor * u_diffuseColor.rgb * diffuse;\n      vec3 specularColor = u_lightColor * specularMaterialColor.rgb * specular;\n      vec3 finalColor = clamp(ambientColor + diffuseColor + emissiveColor.rgb, 0.0, 1.0);\n      finalColor *= color.rgb * ambientSamplerColor;\n      finalColor += specularColor/* + reflectionColor + refractionColor*/;\n      color = vec4(finalColor, u_diffuseColor.a * color.a);\n    #else\n      color = vec4(u_diffuseColor.rgb * color.rgb, u_diffuseColor.a * color.a);\n    #endif\n    #ifdef WIREFRAME\n      gl_FragColor = mix(vec4(u_wireframeColor, u_transparency), color, edgeFactor());\n    #else\n      gl_FragColor = color;\n    #endif\n  #endif\n}\n';
 
 // Source: src/shader/ShaderUtil.js
@@ -1837,6 +1815,7 @@ var Scene = wg.Scene = function (canvas, options) {
   self._viewport = {x: 0, y: 0, width: 0, height: 0};
   self._autoResize = false;
   self._clipPane = [0, 0, 0, 0];
+  self._animations = [];
   self._handleResize = function () {
     self.setSize(window.innerWidth, window.innerHeight);
   };
@@ -2057,25 +2036,101 @@ Scene.prototype._setViewport = function (x, y, width, height) {
   self._gl.viewport(x, y, width, height);
 };
 
-Scene.prototype._handleAnimation = function (time) {
+Scene.prototype.loadGLTF = function (urlPath, name, callback) {
   var self = this,
-    hasAnimation = false;
-  self._objects.forEach(function (object) {
-    if (object.animations) {
-      if (!hasAnimation) {
-        hasAnimation = true;
+    gl = self._gl;
+  GLTFParser.parse(urlPath, name, function (data) {
+    console.log(data);
+    var meshes = [],
+      nodes = [];
+    data.meshes.forEach(function (mesh) {
+      var primitives = [],
+        meshObject = {
+          primitives: primitives
+        };
+      meshes.push(meshObject);
+      mesh.primitives.forEach(function (primitive) {
+        // TODO should not generate auto, if no normal, then no lights
+        var buffers = primitive.buffers;
+        if (!buffers.normal) {
+          buffers.normal = wg.Util.calculateNormals(buffers.position, buffers.index);
+        }
+        if (buffers.position0 && !buffers.normal0) {
+          buffers.normal0 = wg.Util.calculateNormals(buffers.position0, buffers.index);
+        }
+        // TODO tangent0, barycentric0
+        var primitive = {
+          vao: new wg.VertexArray(gl, primitive)
+        };
+        // TODO primitive.material
+        primitive.material = new wg.Material();
+        primitive.material.light = false;
+        primitive.material.diffuseColor = [0.5, 0.5, 0.5, 1];
+        if (mesh.weights) {
+          primitive.material.weights = mesh.weights;
+        }
+        primitives.push(primitive);
+      });
+    });
+    data.nodes.forEach(function (nodeObject) {
+      var object = new wg.Object();
+      var info = object._info = {};
+      nodeObject.rotation && (info.rotation = nodeObject.rotation);
+      nodeObject.translation && (info.translation = nodeObject.translation);
+      nodeObject.scale && (info.scale = nodeObject.scale);
+      nodeObject.weights && (info.weights = nodeObject.weights);
+      if (nodeObject.matrix) {
+        object._modelMatrix = nodeObject.matrix;
       }
-    } else {
-      return;
+      if (nodeObject.mesh != null) {
+        object.mesh = meshes[nodeObject.mesh];
+      }
+      // nodeObject.skin
+      nodes.push(object);
+    });
+    data.scenes.forEach(function (sceneObject) {
+      sceneObject.nodes.forEach(function (nodeIndex) {
+        addObject(nodeIndex);
+      });
+    });
+
+    // TODO which animation should be actived
+    data.animations.forEach(function (animation) {
+      animation.channels.forEach(function (channel) {
+        channel.node = nodes[channel.node];
+      });
+      self.addAnimation(animation);
+    });
+
+    callback && callback(nodes);
+
+    function addObject (nodeIndex, parent) {
+      var object = nodes[nodeIndex],
+        nodeObject = data.nodes[nodeIndex];
+      self.add(object);
+      if (parent) {
+        object.parent = parent;
+        parent.children.push(object);
+      }
+      if (nodeObject.children) {
+        nodeObject.children.forEach(function (childIndex) {
+          addObject(childIndex, object);
+        });
+      }
     }
-    var node = object._node;
-    var hasMatrix = false;
-    object.animations.forEach(function (animation) {
-      if (!object.material.weights && animation.path === 'weights') {
-        return;
-      }
-      var input = animation.sampler.input;
-      var output = animation.sampler.splitOutput || animation.sampler.output;
+  });
+};
+
+Scene.prototype.addAnimation = function (animation) {
+  this._animations.push(animation);
+};
+
+Scene.prototype._handleAnimation = function (time) {
+  var self = this;
+  self._animations.forEach(function (animation) {
+    animation.channels.forEach(function (channel) {
+      var input = channel.sampler.input;
+      var output = channel.sampler.splitOutput || channel.sampler.output;
       var currentTime = time / 1000 % input[input.length - 1];
       var previousTime, nextTime, previousValue, nextValue;
       input.some(function (time, index) {
@@ -2091,35 +2146,35 @@ Scene.prototype._handleAnimation = function (time) {
       });
       var t = (currentTime - previousTime) / (nextTime - previousTime);
 
-      if (animation.path === 'rotation') {
-        hasMatrix = true;
-        quat.slerp(node.rotation, previousValue, nextValue, t);
-      } else if (animation.path === 'translation') {
-        hasMatrix = true;
-        vec3.lerp(node.translation, previousValue, nextValue, t);
-      } else if (animation.path === 'scale') {
-        hasMatrix = true;
-        vec3.lerp(node.scale, previousValue, nextValue, t);
-      } else if (animation.path === 'weights') {
+      var node = channel.node;
+      var info = node._info;
+      if (channel.path === 'rotation') {
+        quat.slerp(info.rotation, previousValue, nextValue, t);
+      } else if (channel.path === 'translation') {
+        vec3.lerp(info.translation, previousValue, nextValue, t);
+      } else if (channel.path === 'scale') {
+        vec3.lerp(info.scale, previousValue, nextValue, t);
+      } else if (channel.path === 'weights') {
         var t0 = 1 - t;
-        var weights = object.material.weights;
+        var weights = info.weights;
         for (var i = 0; i < previousValue.length; i++) {
           weights[i] = t0 * previousValue[i] + t * nextValue[i];
         }
       }
+      if (channel.path !== 'weights') {
+        // TODO performance if one node have two animations
+        mat4.fromRotationTranslationScale(
+          node._modelMatrix,
+          info.rotation || defaultRotation,
+          info.translation || defaultTranslation,
+          info.scale || defaultScale
+        );
+        mat3.normalFromMat4(node._normalMatrix, node._modelMatrix);
+      }
     });
-    if (hasMatrix) {
-      mat4.fromRotationTranslationScale(
-        object._modelMatrix,
-        node.rotation || defaultRotation,
-        node.translation || defaultTranslation,
-        node.scale || defaultScale
-      );
-      mat3.normalFromMat4(object._normalMatrix, object._modelMatrix);
-    }
   });
 
-  hasAnimation && self.redraw();
+  self._animations.length && self.redraw();
 }
 
 Scene.prototype.draw = function (time) {
@@ -2177,25 +2232,26 @@ Scene.prototype.draw = function (time) {
   // self._glowEffect.pass();
 
   function drawObject (object) {
-    var vao = self.getVertexArray(object),
-      material = object.material;
-    if (!vao) {
-      return;
-    }
-
-    if (!vao._parts) {
-      if (object.material.transparent !== gl._transparent) {
-        return;
+    if (object.mesh) {
+      object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
+      object.mesh.primitives.forEach(function (part) {
+        setProgram(part.material);
+        part.vao.draw();
+      });
+    } else {
+      var vao = self.getVertexArray(object);
+      if (vao) {
+        object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
+        if (vao._parts) {
+          vao.draw(preDrawCallback);
+        } else {
+          if (object.material.transparent === gl._transparent) {
+            setProgram(object.material);
+            vao.draw();
+          }
+        }
       }
     }
-
-    object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
-
-    if (!vao._parts) {
-      setProgram(material);
-    }
-
-    vao.draw(preDrawCallback);
 
     function setProgram (material) {
       var key = material.getKey(),
@@ -2229,7 +2285,7 @@ Scene.prototype.draw = function (time) {
       uniforms.u_shininess = material.shininess;
       uniforms.u_transparency = material.transparency;
 
-      uniforms.u_weights = material.weights;
+      uniforms.u_weights = object._info.weights || material.weights;
 
       program.use();
       program.setUniforms(uniforms);
@@ -2282,6 +2338,9 @@ Scene.prototype.getVertexArray = function (object) {
   if (object.vao) {
     return object.vao;
   }
+  if (!object.type) {
+    return null;
+  }
 
   var self = this,
     gl = self._gl,
@@ -2290,16 +2349,11 @@ Scene.prototype.getVertexArray = function (object) {
     vao = gl.cache.vaos[type];
   if (geometry) {
     if (!vao) {
-      vao = gl.cache.vaos[type] = new VertexArray(gl, {
-        buffers: geometry
-      });
+      vao = gl.cache.vaos[type] = new VertexArray(gl, geometry);
     }
     object.vao = vao;
     if (vao._color) {
       object.material.vertexColor = vao._color;
-    }
-    if (vao._weights) {
-      object.material.weights = vao._weights;
     }
   }
   return vao;
@@ -3963,6 +4017,8 @@ wg.Object = function () {
   self._scale = vec3.fromValues(1, 1, 1);
   self._rotation = vec3.fromValues(0, 0, 0);
   self._matrixDirty = false;
+  self.parent = null;
+  self.children = [];
   self.material = new Material();
 };
 
@@ -4240,10 +4296,12 @@ ObjParser.parseObjMtl = function (urlPath, obj, mtl) {
   });
   // console.timeEnd('parse');
   return {
-    position: result.vertices,
-    normal: result.normals,
-    uv: result.uvs,
-    index: result.indices,
+    buffers: {
+      position: result.vertices,
+      normal: result.normals,
+      uv: result.uvs,
+      index: result.indices
+    },
     parts: result.parts
   };
 };
@@ -4278,7 +4336,6 @@ var GLTFParser = wg.GLTFParser = {},
     translation: 3,
     rotation: 4,
     scale: 3,
-    // weights
   };
 
 GLTFParser.parse = function (urlPath, name, callback) {
@@ -4289,9 +4346,10 @@ GLTFParser.parse = function (urlPath, name, callback) {
       currentBufferCount = 0,
       bufferCount = json.buffers.length,
       accessors = [],
-      geometries = [],
+      meshes = [],
+      skins = [],
       nodes = [],
-      nodeMap = {};
+      animations = [];
 
     json.buffers.forEach(function (buffer, index) {
       if (buffer.uri.indexOf('data:') === 0) {
@@ -4315,13 +4373,13 @@ GLTFParser.parse = function (urlPath, name, callback) {
       json.accessors.forEach(function (accessor) {
         var arrayType = componentTypeMap[accessor.componentType],
           bufferView = json.bufferViews[accessor.bufferView],
-          // bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
+          // TODO bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
           buffer = buffers[bufferView.buffer],
           offset = accessor.byteOffset + bufferView.byteOffset,
           typeSize = typeMap[accessor.type],
           count = accessor.count;
           length = count * typeSize;
-        // accessor.max, accessor.min
+        // TODO accessor.max, accessor.min
         accessors.push({
           buffer: new arrayType(buffer, offset, length),
           offset: offset,
@@ -4332,145 +4390,161 @@ GLTFParser.parse = function (urlPath, name, callback) {
       });
 
       json.meshes.forEach(function (mesh) {
-        // TODO Handle multi primitives
-        // mesh.name
+        var primitives = [],
+          meshObject = {
+            primitives: primitives
+          };
+        meshes.push(meshObject);
+        (mesh.name != null) && (meshObject.name = mesh.name);
+        (mesh.weights != null) && (meshObject.weights = mesh.weights);
         mesh.primitives.forEach(function (primitive) {
-          var geometry = {},
-            targets;
-          geometries.push(geometry);
-          if (primitive.mode != null) {
-            geometry.mode = modeMap[primitive.mode];
-          }
+          var buffers = {},
+            primitiveObject = {
+              buffers: buffers
+            };
+          primitives.push(primitiveObject);
+          (primitive.mode != null) && (primitiveObject.mode = modeMap[primitive.mode]);
           Object.keys(primitive.attributes).forEach(function (attributeKey) {
             var buffer = accessors[primitive.attributes[attributeKey]].buffer;
             switch (attributeKey) {
               case 'POSITION':
-                geometry.position = buffer;
+                buffers.position = buffer;
                 break;
               case 'NORMAL':
-                geometry.normal = buffer;
+                buffers.normal = buffer;
                 break;
               case 'TANGENT':
-                geometry.tangent = buffer;
+                buffers.tangent = buffer;
                 break;
               case 'TEXCOORD_0':
-                geometry.uv = buffer;
+                buffers.uv = buffer;
                 break;
               case 'TEXCOORD_1':
                 break;
               case 'COLOR_0':
-                geometry.color = buffer;
+                buffers.color = buffer;
                 break;
               case 'JOINTS_0':
+                buffers.joint = buffer;
                 break;
               case 'WEIGHTS_0':
+                buffers.weight = buffer;
                 break;
             }
           });
           if (primitive.targets) {
-            targets = geometry.targets = [];
-            primitive.targets.forEach(function (target) {
-              var geometryTarget = {};
-              targets.push(geometryTarget);
-              if (target.POSITION) {
-                geometryTarget.position = accessors[target.POSITION].buffer;
-              }
+            meshObject.targetCount = primitive.targets.length;
+            primitive.targets.forEach(function (target, index) {
+              buffers['position' + index] = accessors[target.POSITION].buffer;
               if (target.NORMAL) {
-                geometryTarget.normal = accessors[target.NORMAL].buffer;
+                buffers['normal' + index] = accessors[target.NORMAL].buffer;
               }
               if (target.TANGENT) {
-                geometryTarget.tangent = accessors[target.TANGENT].buffer;
+                buffers['tangent' + index] = accessors[target.TANGENT].buffer;
               }
             });
-            // TODO how multi primitives match one mesh.weights
-            if (mesh.weights) {
-              geometry.weights = mesh.weights;
-            }
           }
-          /*
-          primitive.material*/
+          // TODO primitive.material
           if (primitive.indices != null) {
-            geometry.index = accessors[primitive.indices].buffer;
+            buffers.index = accessors[primitive.indices].buffer;
           }
         });
       });
 
-      // TODO multi scenes
-      json.scenes.forEach(function (scene) {
-        // scene.name
-        scene.nodes && scene.nodes.forEach(function (nodeIndex) {
-          var node = json.nodes[nodeIndex],
-            matrix, nodeObject;
-          if (node.matrix) {
-            matrix = mat4.create();
-            mat4.copy(matrix, node.matrix);
-          } else if (node.rotation || node.scale || node.translation) {
-            matrix = mat4.create();
-            mat4.fromRotationTranslationScale(
-              matrix,
-              node.rotation || defaultRotation,
-              node.translation || defaultTranslation,
-              node.scale || defaultScale
-            );
-          }
-          if (node.camera != null) {
-            ;
-          } else if (node.mesh != null) {
-            nodeObject = {
-              name: node.name,
-              matrix: matrix,
-              geometry: node.mesh, // TODO
-              rotation: node.rotation,
-              translation: node.translation,
-              scale: node.scale
-            };
-            nodes.push(nodeObject);
-            nodeMap[nodeIndex] = nodeObject;
-            if (node.children) {
-              node.children.forEach(function (child) {
-                ;
-              });
-            }
-            if (node.skin != null) {
-              ;
-            }
-            // TODO node.weights will override mesh.weights
-            if (node.weights) {
-              nodeObject.weights = node.weights;
-            }
-          }
-        });
+      json.nodes && json.nodes.forEach(function (node) {
+        var nodeObject = {},
+          matrix;
+        nodes.push(nodeObject);
+        (node.name != null) && (nodeObject.name = node.name);
+        node.rotation && (nodeObject.rotation = node.rotation);
+        node.translation && (nodeObject.translation = node.translation);
+        node.scale && (nodeObject.scale = node.scale);
+        node.weights && (nodeObject.weights = node.weights);
+        node.children && (nodeObject.children = node.children);
+        if (node.matrix) {
+          matrix = mat4.create();
+          mat4.copy(matrix, node.matrix);
+        } else if (node.rotation || node.scale || node.translation) {
+          matrix = mat4.create();
+          mat4.fromRotationTranslationScale(
+            matrix,
+            node.rotation || defaultRotation,
+            node.translation || defaultTranslation,
+            node.scale || defaultScale
+          );
+        }
+        if (matrix) {
+          nodeObject.matrix = matrix;
+        }
+        if (node.mesh != null) {
+          nodeObject.mesh = node.mesh;
+        }
+        if (node.camera != null) {
+          // TODO
+        }
       });
 
-      // TODO mutil animations
+      json.skins && json.skins.forEach(function (skin) {
+        var skinObject = {
+          inverseBindMatrices: accessors[skin.inverseBindMatrices],
+          joints: skin.joints
+        };
+        skins.push(skinObject);
+      });
+
+      json.nodes && json.nodes.forEach(function (node, index) {
+        var nodeObject = nodes[index];
+        if (node.skin != null) {
+          nodeObject.skin = skins[node.skin];
+        }
+      });
+
+      /*json.scenes.forEach(function (scene) {
+        var sceneObject = {};
+        scenes.push(sceneObject);
+        (scene.name != null) && (sceneObject.name = scene.name);
+        if (scene.nodes) {
+          sceneObject.nodes = scene.nodes.map(function (nodeIndex) {
+            return nodes[nodeIndex];
+          });
+        }
+      });*/
+
       json.animations && json.animations.forEach(function (animation) {
-        // animation.name
-        var samplerObjects = [];
+        var channels = [],
+          animationObject = {
+            channels: channels
+          },
+          samples = [];
+        animations.push(animationObject);
+        (animation.name != null) && (animationObject.name = animation.name);
         animation.samplers.forEach(function (sampler) {
-          samplerObjects.push({
+          samples.push({
             input: accessors[sampler.input].buffer,
             interpolation: sampler.interpolation, // 'LINEAR', 'STEP', 'CUBICSPLINE'
             output: accessors[sampler.output],
           });
         });
         animation.channels.forEach(function (channel) {
-          var node = nodeMap[channel.target.node];
-          var geometry = geometries[node.geometry];
+          var node = nodes[channel.target.node];
+          var mesh = meshes[node.mesh];
           var path = channel.target.path;
-          var animations = node.animations || (node.animations = []);
 
-          var samplerObject = samplerObjects[channel.sampler];
+          var samplerObject = samples[channel.sampler];
           var accessorObject = samplerObject.output;
           var buffer = accessorObject.buffer.buffer;
           var output = [];
           if (path === 'weights') {
-            var targetCount = geometry.targets.length;
+            var targetCount = mesh.targetCount;
             var count = accessorObject.count / targetCount;
             for (var i = 0; i < count; i++) {
               var offset = accessorObject.offset + i * 4 * targetCount;
               output.push(new Float32Array(buffer, offset, targetCount));
             }
             samplerObject.splitOutput = output;
+            if (!node.weights) {
+              node.weights = mesh.weights.slice(0);
+            }
           } else {
             var size = targetPathSizeMap[path];
             for (var i = 0; i < accessorObject.count; i++) {
@@ -4478,18 +4552,18 @@ GLTFParser.parse = function (urlPath, name, callback) {
               output.push(new Float32Array(buffer, offset, size));
             }
             samplerObject.output = output;
+            if (path === 'translation' && !node.translation) {
+              node.translation = vec3.create();
+            }
+            if (path === 'rotation' && !node.rotation) {
+              node.rotation = quat.create();
+            }
+            if (path === 'scale' && !node.scale) {
+              node.scale = vec3.create();
+            }
           }
-          if (path === 'translation' && !node.translation) {
-            node.translation = vec3.create();
-          }
-          if (path === 'rotation' && !node.rotation) {
-            node.rotation = quat.create();
-          }
-          if (path === 'scale' && !node.scale) {
-            node.scale = vec3.create();
-          }
-
-          animations.push({
+          channels.push({
+            node: channel.target.node,
             sampler: samplerObject,
             path: path // 'translation', 'rotation', 'scale', 'weights'
           });
@@ -4497,21 +4571,22 @@ GLTFParser.parse = function (urlPath, name, callback) {
       });
 
       callback({
-        geometries: geometries,
-        nodes: nodes
+        nodes: nodes,
+        scenes: json.scenes,
+        meshes: meshes,
+        animations: animations
       });
     }
   });
 
   function dataURIToBufferArray (data) {
     var indexOfcomma = data.indexOf(','),
-      i = 0,
-      n, result;
+      i, n, result;
     data = data.substr(indexOfcomma + 1);
     data = atob(data);
     n = data.length;
     result = new Uint8Array(n);
-    for (; i<n; i++) {
+    for (i = 0; i < n; i++) {
       result[i] = data.charCodeAt(i);
     }
     return result.buffer;
@@ -4570,7 +4645,7 @@ var Material = wg.Material = function () {
   },
   {
     name: 'shininess',
-    value: 10.0
+    value: 64.0
   },
   {
     name: 'transparency',

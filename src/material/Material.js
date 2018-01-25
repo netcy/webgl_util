@@ -49,7 +49,7 @@ var Material = wg.Material = function () {
   },
   {
     name: 'shininess',
-    value: 10.0
+    value: 64.0
   },
   {
     name: 'transparency',
