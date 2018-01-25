@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.26.0] - 2018-01-26
+### Added
+- GLTFParser: skin
+
+
 ## [0.25.0] - 2018-01-25
 ### Changed
 - More robus GLTFParser

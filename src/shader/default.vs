@@ -23,8 +23,8 @@ uniform mat4 u_modelViewProjectMatrix;
 #endif
 
 #ifdef SKIN
-  attribute vec3 a_joint;
-  attribute vec3 a_weight;
+  attribute vec4 a_joint;
+  attribute vec4 a_weight;
   uniform mat4 u_jointMatrix[SKIN_JOINTS_COUNT];
 #endif
 

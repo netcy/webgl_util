@@ -107,6 +107,11 @@ var Material = wg.Material = function () {
     value: null,
     dirty: true
   },
+  {
+    name: 'jointsCount',
+    value: 0,
+    dirty: true
+  },
 ].forEach(function (property) {
   defineProperty(Material.prototype, property.name, property.value, property.dirty ? function (property, oldValue, newValue) {
     this._dirty = true;
@@ -138,6 +143,16 @@ Material.prototype.getKey = function () {
       keys.push({
         name: 'MORPH_TARGETS_COUNT',
         value: self._weights.length,
+        toString: function () {
+          return this.name + ':' + this.value;
+        }
+      });
+    }
+    if (self._jointsCount > 0) {
+      keys.push('SKIN');
+      keys.push({
+        name: 'SKIN_JOINTS_COUNT',
+        value: self._jointsCount,
         toString: function () {
           return this.name + ':' + this.value;
         }

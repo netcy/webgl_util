@@ -1,6 +1,6 @@
 var wg = root.wg = {};
 var Util = wg.Util = {
-  version: '0.25.0'
+  version: '0.26.0'
 };
 
 var defaultTranslation = wg.defaultTranslation = vec3.create(),

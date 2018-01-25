@@ -38,7 +38,6 @@ High level WebGL API encapsulation.
 
 ### GLTF
 
-#### Skin
 #### PBRMaterial
 
 ### Fog

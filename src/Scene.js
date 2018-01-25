@@ -306,11 +306,11 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
           vao: new wg.VertexArray(gl, primitive)
         };
         // TODO primitive.material
-        primitive.material = new wg.Material();
-        primitive.material.light = false;
-        primitive.material.diffuseColor = [0.5, 0.5, 0.5, 1];
+        var material = primitive.material = new wg.Material();
+        material.light = false;
+        material.diffuseColor = [0.5, 0.5, 0.5, 1];
         if (mesh.weights) {
-          primitive.material.weights = mesh.weights;
+          material.weights = mesh.weights;
         }
         primitives.push(primitive);
       });
@@ -328,8 +328,34 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       if (nodeObject.mesh != null) {
         object.mesh = meshes[nodeObject.mesh];
       }
-      // nodeObject.skin
+      if (nodeObject.skin) {
+        object.skin = nodeObject.skin;
+        object.mesh.primitives.forEach(function (primitive) {
+          primitive.material.jointsCount = object.skin.joints.length;
+        });
+      }
       nodes.push(object);
+    });
+    nodes.forEach(function (node) {
+      if (node.skin) {
+        var skin = node.skin;
+        var inverseBindMatrices = skin.inverseBindMatrices;
+        var joints = skin.joints = skin.joints.map(function (joint) {
+          return nodes[joint];
+        });
+        var jointMatrixs = skin.jointMatrixs = new Array(joints.length);
+        var jointMatrix = skin.jointMatrix = new Float32Array(16 * joints.length);
+        for (var i = 0; i < joints.length; i++) {
+          jointMatrixs[i] = new Float32Array(jointMatrix.buffer, i * 16 * 4, 16);
+        }
+        skin.update = function () {
+          var self = this;
+          self.joints.forEach(function (joint, i) {
+            mat4.multiply(self.jointMatrixs[i], joint.worldMatrix, self.inverseBindMatrices[i]);
+          });
+        };
+        skin.update();
+      }
     });
     data.scenes.forEach(function (sceneObject) {
       sceneObject.nodes.forEach(function (nodeIndex) {
@@ -353,7 +379,9 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       self.add(object);
       if (parent) {
         object.parent = parent;
-        parent.children.push(object);
+        if (parent.skin) {
+          object.skin = parent.skin;
+        }
       }
       if (nodeObject.children) {
         nodeObject.children.forEach(function (childIndex) {
@@ -412,7 +440,13 @@ Scene.prototype._handleAnimation = function (time) {
           info.translation || defaultTranslation,
           info.scale || defaultScale
         );
-        mat3.normalFromMat4(node._normalMatrix, node._modelMatrix);
+        node.modelMatrix = node._modelMatrix;
+        if (node.mesh) {
+          mat3.normalFromMat4(node._normalMatrix, node._modelMatrix);
+        }
+        if (node.skin) {
+          node.skin.update();
+        }
       }
     });
   });
@@ -529,6 +563,12 @@ Scene.prototype.draw = function (time) {
       uniforms.u_transparency = material.transparency;
 
       uniforms.u_weights = object._info.weights || material.weights;
+
+      if (object.skin) {
+        uniforms.u_jointMatrix = object.skin.jointMatrix;
+      } else {
+        uniforms.u_jointMatrix = null;
+      }
 
       program.use();
       program.setUniforms(uniforms);

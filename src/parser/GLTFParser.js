@@ -176,10 +176,15 @@ GLTFParser.parse = function (urlPath, name, callback) {
       });
 
       json.skins && json.skins.forEach(function (skin) {
-        var skinObject = {
-          inverseBindMatrices: accessors[skin.inverseBindMatrices],
-          joints: skin.joints
-        };
+        var inverseBindMatrices = accessors[skin.inverseBindMatrices],
+          inverseBindMatricesArray = new Array(skin.joints.length),
+          skinObject = {
+            joints: skin.joints,
+            inverseBindMatrices: inverseBindMatricesArray
+          };
+        for (var i = 0; i < skin.joints.length; i++ ) {
+          inverseBindMatricesArray[i] = new Float32Array(inverseBindMatrices.buffer, i * 16 * 4, 16);
+        }
         skins.push(skinObject);
       });
 
