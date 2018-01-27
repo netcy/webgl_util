@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.28.0] - 2018-01-28
+### Added
+- GLTFParser: common material
+
+
 ## [0.27.0] - 2018-01-27
 ### Added
 - Object#parent, worldMatrix

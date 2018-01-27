@@ -33,11 +33,24 @@ var GLTFParser = wg.GLTFParser = {},
     translation: 3,
     rotation: 4,
     scale: 3,
+  },
+  textureWrapMap = {
+    33071: 'CLAMP_TO_EDGE', // WebGLRenderingContext.CLAMP_TO_EDGE
+    10497: 'REPEAT', // WebGLRenderingContext.REPEAT
+    33648: 'MIRRORED_REPEAT' // WebGLRenderingContext.MIRRORED_REPEAT
+  },
+  textureFilterMap = {
+    9728: 'NEAREST', // WebGLRenderingContext.NEAREST,
+    9729: 'LINEAR', // WebGLRenderingContext.LINEAR,
+    9984: 'NEAREST_MIPMAP_NEAREST', // WebGLRenderingContext.NEAREST_MIPMAP_NEAREST,
+    9985: 'LINEAR_MIPMAP_NEAREST', // WebGLRenderingContext.LINEAR_MIPMAP_NEAREST,
+    9986: 'NEAREST_MIPMAP_LINEAR', // WebGLRenderingContext.NEAREST_MIPMAP_LINEAR,
+    9987: 'LINEAR_MIPMAP_LINEAR', // WebGLRenderingContext.LINEAR_MIPMAP_LINEAR,
   };
 
-GLTFParser.parse = function (urlPath, name, callback) {
-  urlPath = urlPath + (urlPath.endsWith('/') ? '' : '/');
-  ajax(urlPath + name + '.gltf', 'json', function (json) {
+GLTFParser.parse = function (path, name, callback) {
+  path = path + (path.endsWith('/') ? '' : '/');
+  ajax(path + name + '.gltf', 'json', function (json) {
     console.log(json);
     var buffers = [],
       currentBufferCount = 0,
@@ -46,13 +59,14 @@ GLTFParser.parse = function (urlPath, name, callback) {
       meshes = [],
       skins = [],
       nodes = [],
-      animations = [];
+      animations = [],
+      textures = [];
 
     json.buffers.forEach(function (buffer, index) {
       if (buffer.uri.indexOf('data:') === 0) {
         addBuffer(dataURIToBufferArray(buffer.uri), index);
       } else {
-        ajax(urlPath + buffer.uri, 'arraybuffer', function (arraybuffer) {
+        ajax(path + buffer.uri, 'arraybuffer', function (arraybuffer) {
           addBuffer(arraybuffer, index);
         });
       }
@@ -150,6 +164,7 @@ GLTFParser.parse = function (urlPath, name, callback) {
               }
             });
           }
+          (primitive.material != null) && (primitiveObject.material = primitive.material);
           // TODO primitive.material
           if (primitive.indices != null) {
             buffers.index = accessors[primitive.indices].buffer;
@@ -270,14 +285,36 @@ GLTFParser.parse = function (urlPath, name, callback) {
         });
       });
 
+      json.textures && json.textures.forEach(function (texture) {
+        var textureObject = {};
+        textures.push(textureObject);
+        if (texture.sampler != null) {
+          var sampler = json.samplers[texture.sampler];
+          sampler.magFilter && (textureObject.magFilter = textureFilterMap[sampler.magFilter]);
+          sampler.minFilter && (textureObject.minFilter = textureFilterMap[sampler.minFilter]);
+          sampler.wrapS && (textureObject.wrapS = textureWrapMap[sampler.wrapS]);
+          sampler.wrapT && (textureObject.wrapT = textureWrapMap[sampler.wrapT]);
+        }
+        if (texture.source != null) {
+          var image = json.images[texture.source];
+          if (image.uri) {
+            textureObject.url = path + image.uri;
+          }
+          // TODO
+          // image.bufferView
+        }
+      });
+
       callback({
         nodes: nodes,
         scenes: json.scenes,
         meshes: meshes,
         animations: animations,
+        textures: textures,
+        materials: json.materials,
         // TODO: For Test, should be deleted later
         buffers: buffers,
-        accessors: accessors
+        accessors: accessors,
       });
     }
   });

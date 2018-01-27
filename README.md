@@ -38,6 +38,7 @@ High level WebGL API encapsulation.
 
 ### GLTF
 
+#### KHR_materials_common
 #### PBRMaterial
 
 ### Fog

@@ -303,17 +303,26 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
           buffers.normal0 = calculateNormals(buffers.position0, buffers.index);
         }
         // TODO tangent0, barycentric0
-        var primitive = {
+        var primitiveObject = {
           vao: new VertexArray(gl, primitive)
         };
-        // TODO primitive.material
-        var material = primitive.material = new Material();
-        // material.light = false;
-        material.diffuseColor = [0.5, 0.5, 0.5, 1];
+        var material = primitiveObject.material = new Material();
+        if (primitive.material != null) {
+          var materialObject = data.materials[primitive.material];
+          if (materialObject.pbrMetallicRoughness) {
+            if (materialObject.pbrMetallicRoughness.baseColorTexture) {
+              var texture = data.textures[materialObject.pbrMetallicRoughness.baseColorTexture.index];
+              material.diffuseImage = texture;
+            }
+          }
+        } else {
+          // material.light = false;
+          material.diffuseColor = [0.5, 0.5, 0.5, 1];
+        }
         if (mesh.weights) {
           material.weights = mesh.weights;
         }
-        primitives.push(primitive);
+        primitives.push(primitiveObject);
       });
     });
     data.nodes.forEach(function (nodeObject) {

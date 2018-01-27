@@ -105,6 +105,7 @@ Texture.prototype.bind = function (unit) {
       gl.UNPACK_FLIP_Y_WEBGL,
       (options.flipY == null ? false : options.flipY) ? 1 : 0
     );
+    // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texParameter
     gl.texParameteri(
       type,
       gl.TEXTURE_MAG_FILTER,
