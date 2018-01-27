@@ -109,7 +109,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           program.setUniforms({
-            u_modelMatrix: object.getModelMatrix()
+            u_modelMatrix: object.worldMatrix
           });
           vao.draw();
         }

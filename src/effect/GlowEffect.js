@@ -274,7 +274,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
-            u_modelMatrix: object.getModelMatrix()
+            u_modelMatrix: object.worldMatrix
           });
           vao.draw();
         }
@@ -303,7 +303,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
-            u_modelMatrix: object.getModelMatrix()
+            u_modelMatrix: object.worldMatrix
           });
           vao.draw();
         }

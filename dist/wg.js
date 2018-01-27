@@ -1274,7 +1274,7 @@ TextureCache.prototype.get = function (image) {
  * @param {Object} options
  * @example
  *     buffers: {
- *       position: [],
+ *       position: [] or { data: [], type: 0, stride: 0, offset: 0 },
  *       normal: [],
  *       uv: [],
  *       tangent: [],
@@ -1294,9 +1294,11 @@ var VertexArray = wg.VertexArray = function (gl, options) {
   self._program = null;
 
   gl.bindVertexArray(self._vao);
+  // TODO reuse buffer (stride, offset)
   Object.keys(buffers).forEach(function (attrName) {
     var bufferData = buffers[attrName];
-    var bufferObject = gl.createBuffer();
+    var buffer = gl.createBuffer();
+    var bufferObject = { buffer: buffer };
     self._bufferMap[attrName] = bufferObject;
     var element_type, element_size, array;
 
@@ -1306,7 +1308,7 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
     if (attrName === 'index') {
       self._index = true;
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufferObject);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
 
       if (bufferData.length <= 256) {
         element_type = 5121; // WebGLRenderingContext.UNSIGNED_BYTE
@@ -1327,13 +1329,20 @@ var VertexArray = wg.VertexArray = function (gl, options) {
       self._count = bufferData.length;
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
     } else {
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
+      var data = bufferData;
+      if (bufferData.data) {
+        (bufferData.stride) && (bufferObject.stride = bufferData.stride);
+        (bufferData.offset) && (bufferObject.offset = bufferData.offset);
+        (bufferData.type) && (bufferObject.type = bufferData.type);
+        data = bufferData.data;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
       if (attrName === 'position' && !self._index) {
-        self._count = bufferData.length / 3;
+        self._count = data.length / 3;
       }
       if (attrName === 'offset') {
-        self._instanceCount = bufferData.length / 16;
+        self._instanceCount = data.length / 16;
       }
     }
   });
@@ -1355,10 +1364,12 @@ VertexArray.prototype.setBufferDatas = function (name, datas) {
   gl.bindVertexArray(self._vao);
   bufferObject = self._bufferMap[name];
   if (!bufferObject) {
-    self._bufferMap[name] = bufferObject = gl.createBuffer();
+    self._bufferMap[name] = bufferObject = {
+      buffer: gl.createBuffer(),
+    };
   }
-  gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(datas), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, datas, gl.STATIC_DRAW);
   if (name === 'offset') {
     self._instanceCount = datas.length / 16;
   }
@@ -1367,12 +1378,12 @@ VertexArray.prototype.setBufferDatas = function (name, datas) {
   }
 };
 
-VertexArray.prototype._setBufferOptions = function (attribute, buffer) {
+VertexArray.prototype._setBufferOptions = function (attribute, bufferObject) {
   //https://stackoverflow.com/questions/38853096/webgl-how-to-bind-values-to-a-mat4-attribute
   var self = this,
     gl = self._gl,
     attributeCount, i;
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject.buffer);
   if (attribute.size > 4) {
     attributeCount = attribute.size / 4;
     for (i = 0; i < attributeCount; i++) {
@@ -1385,7 +1396,14 @@ VertexArray.prototype._setBufferOptions = function (attribute, buffer) {
   } else {
     gl.enableVertexAttribArray(attribute.location);
     // index, size, type, normalized, stride, offset
-    gl.vertexAttribPointer(attribute.location, attribute.size, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(
+      attribute.location,
+      attribute.size,
+      bufferObject.type || gl.FLOAT,
+      false,
+      bufferObject.stride || 0,
+      bufferObject.offset || 0
+    );
     if (attribute.name === 'offset') {
       gl.vertexAttribDivisor(attribute.location, 1);
     }
@@ -1400,8 +1418,7 @@ VertexArray.prototype.bind = function (program) {
   if (self._program !== program) {
     self._program = program;
     Object.keys(bufferMap).forEach(function (key) {
-      var attribute = program._attributes[key],
-        buffer = bufferMap[key];
+      var attribute = program._attributes[key];
       if (attribute && key !== 'index') {
         self._setBufferOptions(attribute, bufferMap[key]);
       }
@@ -1455,7 +1472,7 @@ VertexArray.prototype.dispose = function () {
     gl = self._gl,
     bufferMap = self._bufferMap;
   Object.keys(bufferMap).forEach(function (key) {
-    gl.deleteBuffer(bufferMap[key]);
+    gl.deleteBuffer(bufferMap[key].buffer);
   });
   gl.deleteVertexArray(self._vao);
   self._vao = null;
@@ -1512,7 +1529,7 @@ var Camera = wg.Camera = function (scene) {
   self._fovy = 45;
   self._aspect = canvas.width / canvas.height;
   self._near = 0.1;
-  self._far = 1000;
+  self._far = 10000;
 
   self._lockY = false;
 
@@ -1895,8 +1912,8 @@ var Scene = wg.Scene = function (canvas, options) {
     //   depth: true,
     //   stencil: true
     // });
-    self._outlineEffect = new OutlineEffect(self);
-    self._glowEffect = new GlowEffect(self);
+    // self._outlineEffect = new OutlineEffect(self);
+    // self._glowEffect = new GlowEffect(self);
     // self._ssaoEffect = new SSAOEffect(self);
 
     // self._fxaaEffect = new FxaaEffect(gl);
@@ -2040,6 +2057,7 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
   var self = this,
     gl = self._gl;
   GLTFParser.parse(urlPath, name, function (data) {
+    window._data = data;
     console.log(data);
     var meshes = [],
       nodes = [];
@@ -2053,18 +2071,18 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
         // TODO should not generate auto, if no normal, then no lights
         var buffers = primitive.buffers;
         if (!buffers.normal) {
-          buffers.normal = wg.Util.calculateNormals(buffers.position, buffers.index);
+          buffers.normal = calculateNormals(buffers.position, buffers.index);
         }
         if (buffers.position0 && !buffers.normal0) {
-          buffers.normal0 = wg.Util.calculateNormals(buffers.position0, buffers.index);
+          buffers.normal0 = calculateNormals(buffers.position0, buffers.index);
         }
         // TODO tangent0, barycentric0
         var primitive = {
-          vao: new wg.VertexArray(gl, primitive)
+          vao: new VertexArray(gl, primitive)
         };
         // TODO primitive.material
-        var material = primitive.material = new wg.Material();
-        material.light = false;
+        var material = primitive.material = new Material();
+        // material.light = false;
         material.diffuseColor = [0.5, 0.5, 0.5, 1];
         if (mesh.weights) {
           material.weights = mesh.weights;
@@ -2093,9 +2111,16 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       }
       nodes.push(object);
     });
+    data.scenes.forEach(function (sceneObject) {
+      sceneObject.nodes.forEach(function (nodeIndex) {
+        addObject(nodeIndex);
+      });
+    });
     nodes.forEach(function (node) {
       if (node.skin) {
         var skin = node.skin;
+        skin.node = node;
+        // skin._inverseNodeMatrix = mat4.create();
         var inverseBindMatrices = skin.inverseBindMatrices;
         var joints = skin.joints = skin.joints.map(function (joint) {
           return nodes[joint];
@@ -2107,17 +2132,18 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
         }
         skin.update = function () {
           var self = this;
+          // var inverseNodeMatrix = self._inverseNodeMatrix;
+          // mat4.invert(inverseNodeMatrix, self.node.worldMatrix);
           self.joints.forEach(function (joint, i) {
             mat4.multiply(self.jointMatrixs[i], joint.worldMatrix, self.inverseBindMatrices[i]);
+            /* TODO jointMatrix(j) =
+              globalTransformOfNodeThatTheMeshIsAttachedTo^-1 *
+              globalTransformOfJointNode(j) * inverseBindMatrixForJoint(j);*/
+            // mat4.multiply(self.jointMatrixs[i], inverseNodeMatrix, self.jointMatrixs[i]);
           });
         };
         skin.update();
       }
-    });
-    data.scenes.forEach(function (sceneObject) {
-      sceneObject.nodes.forEach(function (nodeIndex) {
-        addObject(nodeIndex);
-      });
     });
 
     // TODO which animation should be actived
@@ -2136,9 +2162,6 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       self.add(object);
       if (parent) {
         object.parent = parent;
-        if (parent.skin) {
-          object.skin = parent.skin;
-        }
       }
       if (nodeObject.children) {
         nodeObject.children.forEach(function (childIndex) {
@@ -2147,6 +2170,11 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       }
     }
   });
+};
+
+Scene.prototype.clear = function () {
+  this._objects = [];
+  this._animations = [];
 };
 
 Scene.prototype.addAnimation = function (animation) {
@@ -2198,14 +2226,14 @@ Scene.prototype._handleAnimation = function (time) {
           info.scale || defaultScale
         );
         node.modelMatrix = node._modelMatrix;
-        if (node.mesh) {
-          mat3.normalFromMat4(node._normalMatrix, node._modelMatrix);
-        }
-        if (node.skin) {
-          node.skin.update();
-        }
       }
     });
+  });
+  // TODO hack
+  self._objects.forEach(function (object) {
+    if (object.skin) {
+      object.skin.update();
+    }
   });
 
   self._animations.length && self.redraw();
@@ -2269,8 +2297,10 @@ Scene.prototype.draw = function (time) {
     if (object.mesh) {
       object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
       object.mesh.primitives.forEach(function (part) {
-        setProgram(part.material);
-        part.vao.draw();
+        if (part.material.transparent === gl._transparent) {
+          setProgram(part.material);
+          part.vao.draw();
+        }
       });
     } else {
       var vao = self.getVertexArray(object);
@@ -2299,7 +2329,7 @@ Scene.prototype.draw = function (time) {
       uniforms.u_lightColor = self._lightColor;
       uniforms.u_lightAmbientColor = self._ambientColor;
 
-      uniforms.u_modelMatrix = object._modelMatrix;
+      uniforms.u_modelMatrix = object.worldMatrix;
       uniforms.u_normalMatrix = object._normalMatrix;
       uniforms.u_normalViewMatrix = object._normalViewMatrix;
       uniforms.u_modelViewInvMatrix = object._modelViewInvMatrix;
@@ -2385,7 +2415,7 @@ Scene.prototype.getVertexArray = function (object) {
   var self = this,
     gl = self._gl,
     type = object.type,
-    geometry = wg.geometries[type],
+    geometry = geometries[type],
     vao = gl.cache.vaos[type];
   if (geometry) {
     if (!vao) {
@@ -3241,7 +3271,7 @@ OutlineEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           program.setUniforms({
-            u_modelMatrix: object.getModelMatrix()
+            u_modelMatrix: object.worldMatrix
           });
           vao.draw();
         }
@@ -3563,7 +3593,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
-            u_modelMatrix: object.getModelMatrix()
+            u_modelMatrix: object.worldMatrix
           });
           vao.draw();
         }
@@ -3592,7 +3622,7 @@ GlowEffect.prototype.pass = function (inputFrameBuffer, outputFrameBuffer) {
         var vao = scene.getVertexArray(object);
         if (vao) {
           self._colorProgram.setUniforms({
-            u_modelMatrix: object.getModelMatrix()
+            u_modelMatrix: object.worldMatrix
           });
           vao.draw();
         }
@@ -3925,7 +3955,7 @@ SSAOEffect.prototype._draw = function (program) {
       // TODO performance
       mat4.multiply(object._viewModelMatrix,
         scene._camera.getViewMatrix(),
-        object.getModelMatrix()
+        object.worldMatrix
       );
       mat3.normalFromMat4(object._viewNormalMatrix, object._viewModelMatrix);
       program.setUniforms({
@@ -4057,7 +4087,6 @@ wg.Object = function () {
   self._position = vec3.create();
   self._scale = vec3.fromValues(1, 1, 1);
   self._rotation = vec3.fromValues(0, 0, 0);
-  self._matrixDirty = false;
   self._parent = null;
   self.children = [];
   self.material = new Material();
@@ -4072,12 +4101,12 @@ function refreshWorldMatrix (object) {
     worldMatrix = object._worldMatrix = mat4.create();
   }
   mat4.multiply(worldMatrix, object._parent.worldMatrix, object._modelMatrix);
+  mat3.normalFromMat4(object._normalMatrix, worldMatrix);
 }
 
 function refreshChildWorldMatrix (object) {
   refreshWorldMatrix(object);
   object.children.length && object.children.forEach(function (child) {
-    refreshWorldMatrix(child);
     refreshChildWorldMatrix(child);
   });
 }
@@ -4128,6 +4157,9 @@ Object.defineProperty(wg.Object.prototype, 'parent', {
     }
     value.children.push(self);
     self._parent = value;
+    if (!value) {
+      self._worldMatrix = null;
+    }
     refreshChildWorldMatrix(self);
   }
 });
@@ -4135,42 +4167,39 @@ Object.defineProperty(wg.Object.prototype, 'parent', {
 wg.Object.prototype.setPosition = function (x, y, z) {
   var self = this;
   vec3.set(self._position, x, y, z);
-  self._matrixDirty = true;
+  self._refreshModelMatrix();
   return self;
 };
 
 wg.Object.prototype.setScale = function (x, y, z) {
   var self = this;
   vec3.set(self._scale, x, y, z);
-  self._matrixDirty = true;
+  self._refreshModelMatrix();
   return self;
 };
 
 wg.Object.prototype.setRotation = function (x, y, z) {
   var self = this;
   vec3.set(self._rotation, x, y, z);
-  self._matrixDirty = true;
+  self._refreshModelMatrix();
   return self;
 };
 
-wg.Object.prototype.getModelMatrix = function () {
+wg.Object.prototype._refreshModelMatrix = function () {
   var self = this,
     modelMatrix = self._modelMatrix;
-  if (self._matrixDirty) {
-    self._matrixDirty = false;
-    mat4.fromTranslation(modelMatrix, self._position);
-    mat4.rotateX(modelMatrix, modelMatrix, self._rotation[0]);
-    mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
-    mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
-    mat4.scale(modelMatrix, modelMatrix, self._scale);
-    mat3.normalFromMat4(self._normalMatrix, modelMatrix);
-  }
+  mat4.fromTranslation(modelMatrix, self._position);
+  mat4.rotateX(modelMatrix, modelMatrix, self._rotation[0]);
+  mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
+  mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
+  mat4.scale(modelMatrix, modelMatrix, self._scale);
+  refreshChildWorldMatrix(self);
   return modelMatrix;
 };
 
 wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {
   var self = this;
-  mat4.multiply(self._modelViewMatrix, viewMatrix, self.getModelMatrix());
+  mat4.multiply(self._modelViewMatrix, viewMatrix, self.worldMatrix);
   mat3.normalFromMat4(self._normalViewMatrix, self._modelViewMatrix);
   mat4.multiply(self._modelViewProjectMatrix, projectMatrix, self._modelViewMatrix);
   mat3.fromMat4(self._modelViewInvMatrix, self._modelViewMatrix);
@@ -4424,6 +4453,12 @@ var GLTFParser = wg.GLTFParser = {},
     5125: Uint32Array, // WebGLRenderingContext.UNSIGNED_INT
     5126: Float32Array, // WebGLRenderingContext.FLOAT
   },
+  componentTypeSizeMap = {
+    5121: 1, // WebGLRenderingContext.UNSIGNED_BYTE
+    5123: 2, // WebGLRenderingContext.UNSIGNED_SHORT
+    5125: 4, // WebGLRenderingContext.UNSIGNED_INT
+    5126: 4, // WebGLRenderingContext.FLOAT
+  },
   modeMap = {
     0: 'POINTS',
     1: 'LINES',
@@ -4480,22 +4515,26 @@ GLTFParser.parse = function (urlPath, name, callback) {
     }
 
     function onBufferReady () {
-      json.accessors.forEach(function (accessor) {
+      // TODO reuse buffer (stride, offset)
+      json.accessors.forEach(function (accessor, index) {
         var arrayType = componentTypeMap[accessor.componentType],
           bufferView = json.bufferViews[accessor.bufferView],
-          // TODO bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
           buffer = buffers[bufferView.buffer],
-          offset = accessor.byteOffset + bufferView.byteOffset,
-          typeSize = typeMap[accessor.type],
-          count = accessor.count;
-          length = count * typeSize;
+          offset = (accessor.byteOffset || 0) + (bufferView.byteOffset || 0),
+          count = accessor.count,
+          length;
+        if (bufferView.byteStride) {
+          length = count * (bufferView.byteStride / componentTypeSizeMap[accessor.componentType]);
+        } else {
+          length = count * typeMap[accessor.type];
+        }
         // TODO accessor.max, accessor.min
         accessors.push({
           buffer: new arrayType(buffer, offset, length),
           offset: offset,
           count: count,
-          typeSize: typeSize,
-          length: length
+          stride: bufferView.byteStride || 0,
+          type: accessor.componentType
         });
       });
 
@@ -4515,7 +4554,12 @@ GLTFParser.parse = function (urlPath, name, callback) {
           primitives.push(primitiveObject);
           (primitive.mode != null) && (primitiveObject.mode = modeMap[primitive.mode]);
           Object.keys(primitive.attributes).forEach(function (attributeKey) {
-            var buffer = accessors[primitive.attributes[attributeKey]].buffer;
+            var accessor = accessors[primitive.attributes[attributeKey]];
+            var buffer = {
+              data: accessor.buffer,
+              type: accessor.type
+            };
+            (accessor.stride) && (buffer.stride = accessor.stride);
             switch (attributeKey) {
               case 'POSITION':
                 buffers.position = buffer;
@@ -4602,7 +4646,7 @@ GLTFParser.parse = function (urlPath, name, callback) {
             inverseBindMatrices: inverseBindMatricesArray
           };
         for (var i = 0; i < skin.joints.length; i++ ) {
-          inverseBindMatricesArray[i] = new Float32Array(inverseBindMatrices.buffer, i * 16 * 4, 16);
+          inverseBindMatricesArray[i] = new Float32Array(inverseBindMatrices.buffer.buffer, i * 16 * 4, 16);
         }
         skins.push(skinObject);
       });
@@ -4678,7 +4722,10 @@ GLTFParser.parse = function (urlPath, name, callback) {
         nodes: nodes,
         scenes: json.scenes,
         meshes: meshes,
-        animations: animations
+        animations: animations,
+        // TODO: For Test, should be deleted later
+        buffers: buffers,
+        accessors: accessors
       });
     }
   });

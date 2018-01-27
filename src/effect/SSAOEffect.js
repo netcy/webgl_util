@@ -264,7 +264,7 @@ SSAOEffect.prototype._draw = function (program) {
       // TODO performance
       mat4.multiply(object._viewModelMatrix,
         scene._camera.getViewMatrix(),
-        object.getModelMatrix()
+        object.worldMatrix
       );
       mat3.normalFromMat4(object._viewNormalMatrix, object._viewModelMatrix);
       program.setUniforms({

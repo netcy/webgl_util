@@ -138,8 +138,8 @@ var Scene = wg.Scene = function (canvas, options) {
     //   depth: true,
     //   stencil: true
     // });
-    self._outlineEffect = new OutlineEffect(self);
-    self._glowEffect = new GlowEffect(self);
+    // self._outlineEffect = new OutlineEffect(self);
+    // self._glowEffect = new GlowEffect(self);
     // self._ssaoEffect = new SSAOEffect(self);
 
     // self._fxaaEffect = new FxaaEffect(gl);
@@ -283,6 +283,7 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
   var self = this,
     gl = self._gl;
   GLTFParser.parse(urlPath, name, function (data) {
+    window._data = data;
     console.log(data);
     var meshes = [],
       nodes = [];
@@ -296,18 +297,18 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
         // TODO should not generate auto, if no normal, then no lights
         var buffers = primitive.buffers;
         if (!buffers.normal) {
-          buffers.normal = wg.Util.calculateNormals(buffers.position, buffers.index);
+          buffers.normal = calculateNormals(buffers.position, buffers.index);
         }
         if (buffers.position0 && !buffers.normal0) {
-          buffers.normal0 = wg.Util.calculateNormals(buffers.position0, buffers.index);
+          buffers.normal0 = calculateNormals(buffers.position0, buffers.index);
         }
         // TODO tangent0, barycentric0
         var primitive = {
-          vao: new wg.VertexArray(gl, primitive)
+          vao: new VertexArray(gl, primitive)
         };
         // TODO primitive.material
-        var material = primitive.material = new wg.Material();
-        material.light = false;
+        var material = primitive.material = new Material();
+        // material.light = false;
         material.diffuseColor = [0.5, 0.5, 0.5, 1];
         if (mesh.weights) {
           material.weights = mesh.weights;
@@ -336,9 +337,16 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       }
       nodes.push(object);
     });
+    data.scenes.forEach(function (sceneObject) {
+      sceneObject.nodes.forEach(function (nodeIndex) {
+        addObject(nodeIndex);
+      });
+    });
     nodes.forEach(function (node) {
       if (node.skin) {
         var skin = node.skin;
+        skin.node = node;
+        // skin._inverseNodeMatrix = mat4.create();
         var inverseBindMatrices = skin.inverseBindMatrices;
         var joints = skin.joints = skin.joints.map(function (joint) {
           return nodes[joint];
@@ -350,17 +358,18 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
         }
         skin.update = function () {
           var self = this;
+          // var inverseNodeMatrix = self._inverseNodeMatrix;
+          // mat4.invert(inverseNodeMatrix, self.node.worldMatrix);
           self.joints.forEach(function (joint, i) {
             mat4.multiply(self.jointMatrixs[i], joint.worldMatrix, self.inverseBindMatrices[i]);
+            /* TODO jointMatrix(j) =
+              globalTransformOfNodeThatTheMeshIsAttachedTo^-1 *
+              globalTransformOfJointNode(j) * inverseBindMatrixForJoint(j);*/
+            // mat4.multiply(self.jointMatrixs[i], inverseNodeMatrix, self.jointMatrixs[i]);
           });
         };
         skin.update();
       }
-    });
-    data.scenes.forEach(function (sceneObject) {
-      sceneObject.nodes.forEach(function (nodeIndex) {
-        addObject(nodeIndex);
-      });
     });
 
     // TODO which animation should be actived
@@ -379,9 +388,6 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       self.add(object);
       if (parent) {
         object.parent = parent;
-        if (parent.skin) {
-          object.skin = parent.skin;
-        }
       }
       if (nodeObject.children) {
         nodeObject.children.forEach(function (childIndex) {
@@ -390,6 +396,11 @@ Scene.prototype.loadGLTF = function (urlPath, name, callback) {
       }
     }
   });
+};
+
+Scene.prototype.clear = function () {
+  this._objects = [];
+  this._animations = [];
 };
 
 Scene.prototype.addAnimation = function (animation) {
@@ -441,14 +452,14 @@ Scene.prototype._handleAnimation = function (time) {
           info.scale || defaultScale
         );
         node.modelMatrix = node._modelMatrix;
-        if (node.mesh) {
-          mat3.normalFromMat4(node._normalMatrix, node._modelMatrix);
-        }
-        if (node.skin) {
-          node.skin.update();
-        }
       }
     });
+  });
+  // TODO hack
+  self._objects.forEach(function (object) {
+    if (object.skin) {
+      object.skin.update();
+    }
   });
 
   self._animations.length && self.redraw();
@@ -512,8 +523,10 @@ Scene.prototype.draw = function (time) {
     if (object.mesh) {
       object._refreshViewMatrix(viewMatrix, camera.getProjectMatrix());
       object.mesh.primitives.forEach(function (part) {
-        setProgram(part.material);
-        part.vao.draw();
+        if (part.material.transparent === gl._transparent) {
+          setProgram(part.material);
+          part.vao.draw();
+        }
       });
     } else {
       var vao = self.getVertexArray(object);
@@ -542,7 +555,7 @@ Scene.prototype.draw = function (time) {
       uniforms.u_lightColor = self._lightColor;
       uniforms.u_lightAmbientColor = self._ambientColor;
 
-      uniforms.u_modelMatrix = object._modelMatrix;
+      uniforms.u_modelMatrix = object.worldMatrix;
       uniforms.u_normalMatrix = object._normalMatrix;
       uniforms.u_normalViewMatrix = object._normalViewMatrix;
       uniforms.u_modelViewInvMatrix = object._modelViewInvMatrix;
@@ -628,7 +641,7 @@ Scene.prototype.getVertexArray = function (object) {
   var self = this,
     gl = self._gl,
     type = object.type,
-    geometry = wg.geometries[type],
+    geometry = geometries[type],
     vao = gl.cache.vaos[type];
   if (geometry) {
     if (!vao) {

@@ -7,8 +7,22 @@ function createGUI (scene) {
     lightColor: convertGLColorToRGB(scene.getLightColor()),
     // wireframeColor: convertGLColorToRGB(scene.getWireframeColor()),
 
-    glowColor: convertGLColorToRGB(scene._glowEffect.getGlowColor()),
-    outlineColor: convertGLColorToRGB(scene._outlineEffect.getOutlineColor()),
+    // glowColor: convertGLColorToRGB(scene._glowEffect.getGlowColor()),
+    // outlineColor: convertGLColorToRGB(scene._outlineEffect.getOutlineColor()),
+    loadGLTF: function () {
+      // http://www.richardkotze.com/top-tips/how-to-open-file-dialogue-just-using-javascript
+      var fileSelector = document.createElement('input');
+      fileSelector.setAttribute('type', 'file');
+      fileSelector.onchange = function(e) {
+        var name = fileSelector.files[0].name;
+        if (name.endsWith('.gltf')) {
+          scene.clear();
+          name = name.substr(0, name.length - 5);
+          scene.loadGLTF('./gltf/2.0/' + name + '/gltf/', name);
+        }
+      };
+      fileSelector.click();
+    },
   };
   var sceneFolder = gui.addFolder('Scene');
   addGUIColor(sceneFolder, config, scene, 'clearColor', 'Clear Color');
@@ -45,7 +59,7 @@ function createGUI (scene) {
   addGUIValue(cameraFolder, camera, 'far', 'Far');
   addGUIValue(cameraFolder, camera, 'fovy', 'Fovy');
 
-  var glowFolder = gui.addFolder('Glow');
+  /*var glowFolder = gui.addFolder('Glow');
   var glowEffect = scene._glowEffect;
   addGUIColor(glowFolder, config, glowEffect, 'glowColor', 'Glow Color');
   addGUIValue(glowFolder, glowEffect, 'blurAmount', 'Blur Amount', {
@@ -83,13 +97,15 @@ function createGUI (scene) {
     min: 0,
     max: 20,
     step: 1
-  });
+  });*/
 
   var vrFolder = gui.addFolder('VR');
   vrFolder.add(scene, 'enterVR').name('Enter VR');
   vrFolder.add(scene, 'exitVR').name('Exit VR');
 
   gui.add(scene, 'enterFullscreen').name('Full Screen');
+  gui.add(scene, 'clear').name('Clear');
+  gui.add(config, 'loadGLTF').name('Load GLTF');
 
   function addGUIColor (gui, config, object, property, name) {
     var orgValue = object['get' + property[0].toUpperCase() + property.substr(1)]();

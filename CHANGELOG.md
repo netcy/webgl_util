@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 
+## [0.27.0] - 2018-01-27
+### Added
+- Object#parent, worldMatrix
+
+### Fixed
+- GLTFParser: skin bug
+
+
 ## [0.26.0] - 2018-01-26
 ### Added
 - GLTFParser: skin

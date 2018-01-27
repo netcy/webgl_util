@@ -4,7 +4,7 @@
  * @param {Object} options
  * @example
  *     buffers: {
- *       position: [],
+ *       position: [] or { data: [], type: 0, stride: 0, offset: 0 },
  *       normal: [],
  *       uv: [],
  *       tangent: [],
@@ -24,9 +24,11 @@ var VertexArray = wg.VertexArray = function (gl, options) {
   self._program = null;
 
   gl.bindVertexArray(self._vao);
+  // TODO reuse buffer (stride, offset)
   Object.keys(buffers).forEach(function (attrName) {
     var bufferData = buffers[attrName];
-    var bufferObject = gl.createBuffer();
+    var buffer = gl.createBuffer();
+    var bufferObject = { buffer: buffer };
     self._bufferMap[attrName] = bufferObject;
     var element_type, element_size, array;
 
@@ -36,7 +38,7 @@ var VertexArray = wg.VertexArray = function (gl, options) {
 
     if (attrName === 'index') {
       self._index = true;
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufferObject);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
 
       if (bufferData.length <= 256) {
         element_type = 5121; // WebGLRenderingContext.UNSIGNED_BYTE
@@ -57,13 +59,20 @@ var VertexArray = wg.VertexArray = function (gl, options) {
       self._count = bufferData.length;
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
     } else {
-      gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
+      var data = bufferData;
+      if (bufferData.data) {
+        (bufferData.stride) && (bufferObject.stride = bufferData.stride);
+        (bufferData.offset) && (bufferObject.offset = bufferData.offset);
+        (bufferData.type) && (bufferObject.type = bufferData.type);
+        data = bufferData.data;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
       if (attrName === 'position' && !self._index) {
-        self._count = bufferData.length / 3;
+        self._count = data.length / 3;
       }
       if (attrName === 'offset') {
-        self._instanceCount = bufferData.length / 16;
+        self._instanceCount = data.length / 16;
       }
     }
   });
@@ -85,10 +94,12 @@ VertexArray.prototype.setBufferDatas = function (name, datas) {
   gl.bindVertexArray(self._vao);
   bufferObject = self._bufferMap[name];
   if (!bufferObject) {
-    self._bufferMap[name] = bufferObject = gl.createBuffer();
+    self._bufferMap[name] = bufferObject = {
+      buffer: gl.createBuffer(),
+    };
   }
-  gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(datas), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, datas, gl.STATIC_DRAW);
   if (name === 'offset') {
     self._instanceCount = datas.length / 16;
   }
@@ -97,12 +108,12 @@ VertexArray.prototype.setBufferDatas = function (name, datas) {
   }
 };
 
-VertexArray.prototype._setBufferOptions = function (attribute, buffer) {
+VertexArray.prototype._setBufferOptions = function (attribute, bufferObject) {
   //https://stackoverflow.com/questions/38853096/webgl-how-to-bind-values-to-a-mat4-attribute
   var self = this,
     gl = self._gl,
     attributeCount, i;
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufferObject.buffer);
   if (attribute.size > 4) {
     attributeCount = attribute.size / 4;
     for (i = 0; i < attributeCount; i++) {
@@ -115,7 +126,14 @@ VertexArray.prototype._setBufferOptions = function (attribute, buffer) {
   } else {
     gl.enableVertexAttribArray(attribute.location);
     // index, size, type, normalized, stride, offset
-    gl.vertexAttribPointer(attribute.location, attribute.size, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(
+      attribute.location,
+      attribute.size,
+      bufferObject.type || gl.FLOAT,
+      false,
+      bufferObject.stride || 0,
+      bufferObject.offset || 0
+    );
     if (attribute.name === 'offset') {
       gl.vertexAttribDivisor(attribute.location, 1);
     }
@@ -130,8 +148,7 @@ VertexArray.prototype.bind = function (program) {
   if (self._program !== program) {
     self._program = program;
     Object.keys(bufferMap).forEach(function (key) {
-      var attribute = program._attributes[key],
-        buffer = bufferMap[key];
+      var attribute = program._attributes[key];
       if (attribute && key !== 'index') {
         self._setBufferOptions(attribute, bufferMap[key]);
       }
@@ -185,7 +202,7 @@ VertexArray.prototype.dispose = function () {
     gl = self._gl,
     bufferMap = self._bufferMap;
   Object.keys(bufferMap).forEach(function (key) {
-    gl.deleteBuffer(bufferMap[key]);
+    gl.deleteBuffer(bufferMap[key].buffer);
   });
   gl.deleteVertexArray(self._vao);
   self._vao = null;

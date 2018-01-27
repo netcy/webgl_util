@@ -13,7 +13,6 @@ wg.Object = function () {
   self._position = vec3.create();
   self._scale = vec3.fromValues(1, 1, 1);
   self._rotation = vec3.fromValues(0, 0, 0);
-  self._matrixDirty = false;
   self._parent = null;
   self.children = [];
   self.material = new Material();
@@ -28,12 +27,12 @@ function refreshWorldMatrix (object) {
     worldMatrix = object._worldMatrix = mat4.create();
   }
   mat4.multiply(worldMatrix, object._parent.worldMatrix, object._modelMatrix);
+  mat3.normalFromMat4(object._normalMatrix, worldMatrix);
 }
 
 function refreshChildWorldMatrix (object) {
   refreshWorldMatrix(object);
   object.children.length && object.children.forEach(function (child) {
-    refreshWorldMatrix(child);
     refreshChildWorldMatrix(child);
   });
 }
@@ -84,6 +83,9 @@ Object.defineProperty(wg.Object.prototype, 'parent', {
     }
     value.children.push(self);
     self._parent = value;
+    if (!value) {
+      self._worldMatrix = null;
+    }
     refreshChildWorldMatrix(self);
   }
 });
@@ -91,42 +93,39 @@ Object.defineProperty(wg.Object.prototype, 'parent', {
 wg.Object.prototype.setPosition = function (x, y, z) {
   var self = this;
   vec3.set(self._position, x, y, z);
-  self._matrixDirty = true;
+  self._refreshModelMatrix();
   return self;
 };
 
 wg.Object.prototype.setScale = function (x, y, z) {
   var self = this;
   vec3.set(self._scale, x, y, z);
-  self._matrixDirty = true;
+  self._refreshModelMatrix();
   return self;
 };
 
 wg.Object.prototype.setRotation = function (x, y, z) {
   var self = this;
   vec3.set(self._rotation, x, y, z);
-  self._matrixDirty = true;
+  self._refreshModelMatrix();
   return self;
 };
 
-wg.Object.prototype.getModelMatrix = function () {
+wg.Object.prototype._refreshModelMatrix = function () {
   var self = this,
     modelMatrix = self._modelMatrix;
-  if (self._matrixDirty) {
-    self._matrixDirty = false;
-    mat4.fromTranslation(modelMatrix, self._position);
-    mat4.rotateX(modelMatrix, modelMatrix, self._rotation[0]);
-    mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
-    mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
-    mat4.scale(modelMatrix, modelMatrix, self._scale);
-    mat3.normalFromMat4(self._normalMatrix, modelMatrix);
-  }
+  mat4.fromTranslation(modelMatrix, self._position);
+  mat4.rotateX(modelMatrix, modelMatrix, self._rotation[0]);
+  mat4.rotateY(modelMatrix, modelMatrix, self._rotation[1]);
+  mat4.rotateZ(modelMatrix, modelMatrix, self._rotation[2]);
+  mat4.scale(modelMatrix, modelMatrix, self._scale);
+  refreshChildWorldMatrix(self);
   return modelMatrix;
 };
 
 wg.Object.prototype._refreshViewMatrix = function (viewMatrix, projectMatrix) {
   var self = this;
-  mat4.multiply(self._modelViewMatrix, viewMatrix, self.getModelMatrix());
+  mat4.multiply(self._modelViewMatrix, viewMatrix, self.worldMatrix);
   mat3.normalFromMat4(self._normalViewMatrix, self._modelViewMatrix);
   mat4.multiply(self._modelViewProjectMatrix, projectMatrix, self._modelViewMatrix);
   mat3.fromMat4(self._modelViewInvMatrix, self._modelViewMatrix);

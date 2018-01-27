@@ -5,6 +5,12 @@ var GLTFParser = wg.GLTFParser = {},
     5125: Uint32Array, // WebGLRenderingContext.UNSIGNED_INT
     5126: Float32Array, // WebGLRenderingContext.FLOAT
   },
+  componentTypeSizeMap = {
+    5121: 1, // WebGLRenderingContext.UNSIGNED_BYTE
+    5123: 2, // WebGLRenderingContext.UNSIGNED_SHORT
+    5125: 4, // WebGLRenderingContext.UNSIGNED_INT
+    5126: 4, // WebGLRenderingContext.FLOAT
+  },
   modeMap = {
     0: 'POINTS',
     1: 'LINES',
@@ -61,22 +67,26 @@ GLTFParser.parse = function (urlPath, name, callback) {
     }
 
     function onBufferReady () {
-      json.accessors.forEach(function (accessor) {
+      // TODO reuse buffer (stride, offset)
+      json.accessors.forEach(function (accessor, index) {
         var arrayType = componentTypeMap[accessor.componentType],
           bufferView = json.bufferViews[accessor.bufferView],
-          // TODO bufferView.byteStride, bufferView.target: 34962(ARRAY_BUFFER) 34963(ELEMENT_ARRAY_BUFFER)
           buffer = buffers[bufferView.buffer],
-          offset = accessor.byteOffset + bufferView.byteOffset,
-          typeSize = typeMap[accessor.type],
-          count = accessor.count;
-          length = count * typeSize;
+          offset = (accessor.byteOffset || 0) + (bufferView.byteOffset || 0),
+          count = accessor.count,
+          length;
+        if (bufferView.byteStride) {
+          length = count * (bufferView.byteStride / componentTypeSizeMap[accessor.componentType]);
+        } else {
+          length = count * typeMap[accessor.type];
+        }
         // TODO accessor.max, accessor.min
         accessors.push({
           buffer: new arrayType(buffer, offset, length),
           offset: offset,
           count: count,
-          typeSize: typeSize,
-          length: length
+          stride: bufferView.byteStride || 0,
+          type: accessor.componentType
         });
       });
 
@@ -96,7 +106,12 @@ GLTFParser.parse = function (urlPath, name, callback) {
           primitives.push(primitiveObject);
           (primitive.mode != null) && (primitiveObject.mode = modeMap[primitive.mode]);
           Object.keys(primitive.attributes).forEach(function (attributeKey) {
-            var buffer = accessors[primitive.attributes[attributeKey]].buffer;
+            var accessor = accessors[primitive.attributes[attributeKey]];
+            var buffer = {
+              data: accessor.buffer,
+              type: accessor.type
+            };
+            (accessor.stride) && (buffer.stride = accessor.stride);
             switch (attributeKey) {
               case 'POSITION':
                 buffers.position = buffer;
@@ -183,7 +198,7 @@ GLTFParser.parse = function (urlPath, name, callback) {
             inverseBindMatrices: inverseBindMatricesArray
           };
         for (var i = 0; i < skin.joints.length; i++ ) {
-          inverseBindMatricesArray[i] = new Float32Array(inverseBindMatrices.buffer, i * 16 * 4, 16);
+          inverseBindMatricesArray[i] = new Float32Array(inverseBindMatrices.buffer.buffer, i * 16 * 4, 16);
         }
         skins.push(skinObject);
       });
@@ -259,7 +274,10 @@ GLTFParser.parse = function (urlPath, name, callback) {
         nodes: nodes,
         scenes: json.scenes,
         meshes: meshes,
-        animations: animations
+        animations: animations,
+        // TODO: For Test, should be deleted later
+        buffers: buffers,
+        accessors: accessors
       });
     }
   });

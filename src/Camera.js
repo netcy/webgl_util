@@ -17,7 +17,7 @@ var Camera = wg.Camera = function (scene) {
   self._fovy = 45;
   self._aspect = canvas.width / canvas.height;
   self._near = 0.1;
-  self._far = 1000;
+  self._far = 10000;
 
   self._lockY = false;
 
